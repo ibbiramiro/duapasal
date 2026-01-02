@@ -11,6 +11,15 @@ type FormState = {
   dob: string
   phone: string
   address_line: string
+  province: string
+  city: string
+  district: string
+  postal_code: string
+  church_branch: string
+  pastor_name: string
+  reminder_opt_in: boolean
+  password: string
+  confirmPassword: string
 }
 
 const initialState: FormState = {
@@ -19,6 +28,15 @@ const initialState: FormState = {
   dob: '',
   phone: '',
   address_line: '',
+  province: '',
+  city: '',
+  district: '',
+  postal_code: '',
+  church_branch: '',
+  pastor_name: '',
+  reminder_opt_in: true,
+  password: '',
+  confirmPassword: '',
 }
 
 export default function RegisterPage() {
@@ -40,18 +58,52 @@ export default function RegisterPage() {
     setStatus('loading')
     setMessage(null)
 
-    const { email, full_name, dob, phone, address_line } = form
-
-    const { error } = await supabase.auth.signInWithOtp({
+    const {
       email,
+      full_name,
+      dob,
+      phone,
+      address_line,
+      province,
+      city,
+      district,
+      postal_code,
+      church_branch,
+      pastor_name,
+      reminder_opt_in,
+      password,
+      confirmPassword,
+    } = form
+
+    if (password.length < 6) {
+      setStatus('error')
+      setMessage('Password minimal 6 karakter.')
+      return
+    }
+
+    if (password !== confirmPassword) {
+      setStatus('error')
+      setMessage('Konfirmasi password tidak sama.')
+      return
+    }
+
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
       options: {
         emailRedirectTo: redirectTo,
-        shouldCreateUser: true,
         data: {
           full_name,
           dob,
           phone,
           address_line,
+          province,
+          city,
+          district,
+          postal_code,
+          church_branch,
+          pastor_name,
+          reminder_opt_in,
         },
       },
     })
@@ -67,7 +119,10 @@ export default function RegisterPage() {
     }
 
     setStatus('sent')
-    setMessage('Link pendaftaran/login sudah dikirim. Silakan cek email Anda.')
+    setMessage(
+      'Akun berhasil didaftarkan. Silakan cek email untuk verifikasi melalui magic link sebelum login.',
+    )
+    setForm(initialState)
   }
 
   const isSubmitting = status === 'loading'
@@ -130,6 +185,75 @@ export default function RegisterPage() {
             />
           </div>
 
+          <div className="grid gap-2 md:grid-cols-2">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Cabang Gereja</label>
+              <input
+                value={form.church_branch}
+                onChange={(e) => updateField('church_branch', e.target.value)}
+                type="text"
+                placeholder="Gereja tempat Anda tergabung"
+                className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
+              />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Pendeta Naungan</label>
+              <input
+                value={form.pastor_name}
+                onChange={(e) => updateField('pastor_name', e.target.value)}
+                type="text"
+                placeholder="Nama pendeta"
+                className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-2 md:grid-cols-2">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Provinsi</label>
+              <input
+                value={form.province}
+                onChange={(e) => updateField('province', e.target.value)}
+                type="text"
+                placeholder="Contoh: DKI Jakarta"
+                className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
+              />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Kota / Kabupaten</label>
+              <input
+                value={form.city}
+                onChange={(e) => updateField('city', e.target.value)}
+                type="text"
+                placeholder="Contoh: Jakarta Selatan"
+                className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-2 md:grid-cols-2">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Kecamatan</label>
+              <input
+                value={form.district}
+                onChange={(e) => updateField('district', e.target.value)}
+                type="text"
+                placeholder="Contoh: Kebayoran Baru"
+                className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
+              />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Kode Pos</label>
+              <input
+                value={form.postal_code}
+                onChange={(e) => updateField('postal_code', e.target.value)}
+                type="text"
+                placeholder="Contoh: 12190"
+                className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
+              />
+            </div>
+          </div>
+
           <div className="grid gap-2">
             <label className="text-sm font-medium">Alamat Lengkap</label>
             <textarea
@@ -141,6 +265,48 @@ export default function RegisterPage() {
               rows={3}
             />
           </div>
+
+          <div className="grid gap-2 md:grid-cols-2">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Password</label>
+              <input
+                value={form.password}
+                onChange={(e) => updateField('password', e.target.value)}
+                type="password"
+                required
+                minLength={6}
+                placeholder="Minimal 6 karakter"
+                className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
+              />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Konfirmasi Password</label>
+              <input
+                value={form.confirmPassword}
+                onChange={(e) => updateField('confirmPassword', e.target.value)}
+                type="password"
+                required
+                minLength={6}
+                placeholder="Ulangi password"
+                className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
+              />
+            </div>
+          </div>
+
+          <label className="flex items-start gap-3 rounded border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={form.reminder_opt_in}
+              onChange={(e) => updateField('reminder_opt_in', e.target.checked)}
+              className="mt-1"
+            />
+            <span>
+              <span className="block font-medium text-slate-800">Reminder Email</span>
+              <span className="text-slate-600">
+                Terima pengingat harian untuk membaca Alkitab dari Duapasal.
+              </span>
+            </span>
+          </label>
 
           <button
             type="submit"

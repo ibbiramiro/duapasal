@@ -38,15 +38,15 @@ export type Database = {
           full_name: string | null
           dob: string | null
           phone: string | null
+          church_branch: string | null
+          pastor_name: string | null
           province: string | null
           city: string | null
           district: string | null
           postal_code: string | null
           address_line: string | null
-          church_id: string | null
-          pastor_id: string | null
           role: string | null
-          reminder_toggle: boolean | null
+          reminder_opt_in: boolean | null
           created_at: string | null
           updated_at: string | null
         }
@@ -56,15 +56,15 @@ export type Database = {
           full_name?: string | null
           dob?: string | null
           phone?: string | null
+          church_branch?: string | null
+          pastor_name?: string | null
           province?: string | null
           city?: string | null
           district?: string | null
           postal_code?: string | null
           address_line?: string | null
-          church_id?: string | null
-          pastor_id?: string | null
           role?: string | null
-          reminder_toggle?: boolean | null
+          reminder_opt_in?: boolean | null
           created_at?: string | null
           updated_at?: string | null
         }
@@ -74,15 +74,15 @@ export type Database = {
           full_name?: string | null
           dob?: string | null
           phone?: string | null
+          church_branch?: string | null
+          pastor_name?: string | null
           province?: string | null
           city?: string | null
           district?: string | null
           postal_code?: string | null
           address_line?: string | null
-          church_id?: string | null
-          pastor_id?: string | null
           role?: string | null
-          reminder_toggle?: boolean | null
+          reminder_opt_in?: boolean | null
           created_at?: string | null
           updated_at?: string | null
         }

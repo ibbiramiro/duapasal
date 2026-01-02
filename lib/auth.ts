@@ -4,7 +4,7 @@ const DEFAULT_ROLE = 'USER'
 
 export async function ensureProfile(user: User) {
   const metadata = user.user_metadata ?? {}
-  const reminderRaw = metadata.reminder_toggle as string | boolean | undefined | null
+  const reminderRaw = metadata.reminder_opt_in as string | boolean | undefined | null
   const reminderToggle =
     reminderRaw === undefined || reminderRaw === null
       ? null
@@ -26,10 +26,10 @@ export async function ensureProfile(user: User) {
     district: (metadata.district as string | undefined) ?? null,
     postal_code: (metadata.postal_code as string | undefined) ?? null,
     address_line: (metadata.address_line as string | undefined) ?? null,
-    church_id: (metadata.church_id as string | undefined) ?? null,
-    pastor_id: (metadata.pastor_id as string | undefined) ?? null,
+    church_branch: (metadata.church_branch as string | undefined) ?? null,
+    pastor_name: (metadata.pastor_name as string | undefined) ?? null,
     role: (user.app_metadata?.role as string | undefined) ?? DEFAULT_ROLE,
-    reminder_toggle: reminderToggle,
+    reminder_opt_in: reminderToggle,
   }
 
   const response = await fetch('/api/profile-sync', {

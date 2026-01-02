@@ -8,7 +8,17 @@ export async function POST(request: Request) {
       id: string
       email: string | null
       full_name: string | null
+      dob?: string | null
+      phone?: string | null
+      province?: string | null
+      city?: string | null
+      district?: string | null
+      postal_code?: string | null
+      address_line?: string | null
+      church_branch?: string | null
+      pastor_name?: string | null
       role: string | null
+      reminder_opt_in?: boolean | null
     }
 
     if (!payload?.id) {
