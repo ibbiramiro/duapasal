@@ -72,12 +72,44 @@ export default function DashboardPage() {
     }
   }, [loading])
 
+  // Refresh when a reading is completed in another tab (reader window)
+  useEffect(() => {
+    if (loading) return
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'duapasal:last_reading_complete') {
+        loadTodayReading()
+      }
+    }
+
+    window.addEventListener('storage', handleStorage)
+
+    let bc: BroadcastChannel | null = null
+    try {
+      bc = new BroadcastChannel('duapasal')
+      bc.onmessage = (event) => {
+        if (event?.data?.type === 'reading_completed') {
+          loadTodayReading()
+        }
+      }
+    } catch (_e) {
+      // Ignore if BroadcastChannel is not available
+    }
+
+    return () => {
+      window.removeEventListener('storage', handleStorage)
+      try {
+        bc?.close()
+      } catch (_e) {
+        // ignore
+      }
+    }
+  }, [loading])
+
   // Refresh when window gains focus (e.g., after closing reader)
   useEffect(() => {
     const handleFocus = () => {
-      if (!loading && !readingLoading) {
-        loadTodayReading()
-      }
+      if (!loading) loadTodayReading()
     }
     window.addEventListener('focus', handleFocus)
     return () => window.removeEventListener('focus', handleFocus)
@@ -86,9 +118,7 @@ export default function DashboardPage() {
   // Refresh on user interaction (click) as a safety net
   useEffect(() => {
     const handleClick = () => {
-      if (!loading && !readingLoading) {
-        loadTodayReading()
-      }
+      if (!loading) loadTodayReading()
     }
     window.addEventListener('click', handleClick)
     return () => window.removeEventListener('click', handleClick)

@@ -140,6 +140,23 @@ function ReaderContent() {
       // Mark as completed locally to disable button
       setCompleted(true)
 
+      // Notify dashboard tab to refresh progress
+      try {
+        localStorage.setItem('duapasal:last_reading_complete', JSON.stringify({
+          at: Date.now(),
+          planItemId,
+        }))
+      } catch (_e) {
+        // ignore
+      }
+      try {
+        const bc = new BroadcastChannel('duapasal')
+        bc.postMessage({ type: 'reading_completed', at: Date.now(), planItemId })
+        bc.close()
+      } catch (_e) {
+        // ignore
+      }
+
       // Close the reader window
       window.close()
       

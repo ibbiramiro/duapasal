@@ -97,20 +97,21 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: profileError.message }, { status: 500 })
     }
 
-    // Get today's earned points
-    const { startIso, endIso } = getJakartaDayBoundsIso(today)
-    const { data: todayLogs, error: todayLogsError } = await supabaseAdmin
-      .from('reading_logs')
-      .select('points_earned')
-      .eq('user_id', userIdFinal)
-      .gte('completed_at', startIso)
-      .lt('completed_at', endIso)
+    // Get today's earned points (based on today's scheduled items)
+    // This avoids timezone/timestamp issues and matches how progress is computed.
+    const todayPointsResult = itemIds.length
+      ? await supabaseAdmin
+          .from('reading_logs')
+          .select('points_earned')
+          .eq('user_id', userIdFinal)
+          .in('plan_item_id', itemIds)
+      : { data: [], error: null }
 
-    if (todayLogsError) {
-      return NextResponse.json({ error: todayLogsError.message }, { status: 500 })
+    if (todayPointsResult.error) {
+      return NextResponse.json({ error: todayPointsResult.error.message }, { status: 500 })
     }
 
-    const todayPoints = todayLogs?.reduce((sum, log) => sum + log.points_earned, 0) || 0
+    const todayPoints = todayPointsResult.data?.reduce((sum, log) => sum + (log.points_earned || 0), 0) || 0
 
     const response: TodayReadingResponse = {
       date: today,
