@@ -67,13 +67,13 @@ export async function GET(request: Request) {
     }
 
     // Get user's completed items for today
-    const itemIds = items?.map((item) => item.id) || []
+    const itemIds = items?.map || []
     const completedItemsResult = itemIds.length
       ? await supabaseAdmin
           .from('reading_logs')
           .select('plan_item_id')
           .eq('user_id', userIdFinal)
-          .in('plan_item_id', itemIds)
+          
       : { data: [], error: null }
 
     const completedItems = completedItemsResult.data
