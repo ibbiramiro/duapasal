@@ -230,7 +230,7 @@ export async function POST(request: Request) {
 
       try {
         await transporter.sendMail({
-          from: '"GBI AVIA" <no-reply@duapasal.id>',
+          from: '"GBI AVIA" <ramirogunady@gmail.com>',
           to: p.email,
           subject: `Selamat Ulang Tahun, ${p.full_name ?? ''}! 🎂`,
           html,
@@ -338,7 +338,7 @@ export async function POST(request: Request) {
 
       try {
         await transporter.sendMail({
-          from: '"GBI AVIA" <no-reply@duapasal.id>',
+          from: '"GBI AVIA" <ramirogunady@gmail.com>',
           to: recipients,
           subject: `Notifikasi Ulang Tahun Jemaat - ${churchName ?? 'Gereja'}`,
           html,
