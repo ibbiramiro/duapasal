@@ -160,6 +160,7 @@ export async function POST(request: Request) {
     const dayCompleted = completedCount === totalCount
 
     let updatedProfile = null
+    console.log('[Complete] dayCompleted?', { dayCompleted, completedCount, totalCount, fallback })
     if (dayCompleted) {
       // Update user's total points and streak
       const { data: currentProfile, error: profileError } = await supabaseAdmin
@@ -169,9 +170,11 @@ export async function POST(request: Request) {
         .single()
 
       if (profileError) {
+        console.error('[Complete] Failed to read current profile:', profileError)
         return NextResponse.json({ error: profileError.message }, { status: 500 })
       }
 
+      console.log('[Complete] currentProfile:', currentProfile)
       // Check yesterday completion to compute streak
       const startUtc = getJakartaDayStartUtc(today)
       const yesterdayStartUtc = new Date(startUtc.getTime() - 24 * 60 * 60 * 1000)
@@ -182,11 +185,18 @@ export async function POST(request: Request) {
       const newStreak = yesterdayCompleted ? prevStreak + 1 : 1
       const newTotalPoints = (currentProfile?.total_points || 0) + 1
 
+      console.log('[Complete] Computed new values:', { prevStreak, yesterdayCompleted, newStreak, newTotalPoints })
+
       // Award 1 point to the last log entry of the day
-      await supabaseAdmin
+      const { error: updatePointsError } = await supabaseAdmin
         .from('reading_logs')
         .update({ points_earned: 1 })
         .eq('id', (readingLog as any).id)
+
+      if (updatePointsError) {
+        console.error('[Complete] Failed to update points_earned on reading_log:', updatePointsError)
+        // Continue anyway, still try to update profile
+      }
 
       // Update profile
       const { data: profile, error: updateError } = await supabaseAdmin
@@ -201,10 +211,12 @@ export async function POST(request: Request) {
         .single()
 
       if (updateError) {
-        return NextResponse.json({ error: updateError.message }, { status: 500 })
+        console.error('[Complete] Failed to update profile:', updateError)
+        return NextResponse.json({ error: `Failed to update profile: ${updateError.message}` }, { status: 500 })
       }
 
       updatedProfile = profile
+      console.log('[Complete] Profile updated:', { userId, newTotalPoints, newStreak })
     }
 
     return NextResponse.json({
