@@ -17,6 +17,7 @@ function ReaderContent() {
   const [data, setData] = useState<VersesResponse | null>(null)
   const [fontSize, setFontSize] = useState(18)
   const [completing, setCompleting] = useState(false)
+  const [completed, setCompleted] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const bookId = searchParams.get('bookId')
@@ -96,8 +97,14 @@ function ReaderContent() {
 
       console.log('[Reader] Matching item:', matchingItem)
 
-      if (!matchingItem) {
-        throw new Error('Tidak dapat menemukan item bacaan yang sesuai')
+      let planItemId: string
+      if (matchingItem) {
+        planItemId = matchingItem.id
+      } else {
+        // Fallback: create a temporary plan item ID based on book/chapters
+        // This allows completion even if not in today's schedule
+        console.warn('[Reader] No matching item found, using fallback')
+        planItemId = `fallback-${bookId}-${startChapter}-${endChapter}`
       }
 
       console.log('[Reader] Sending complete request...')
@@ -108,7 +115,8 @@ function ReaderContent() {
           Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
-          planItemId: matchingItem.id
+          planItemId,
+          fallback: !matchingItem // Flag to indicate fallback mode
         })
       })
 
@@ -128,6 +136,9 @@ function ReaderContent() {
       } else {
         alert(`✅ Bacaan selesai! Anda mendapatkan ${result.pointsEarned} poin.`)
       }
+
+      // Mark as completed locally to disable button
+      setCompleted(true)
 
       // Close the reader window
       window.close()
@@ -252,10 +263,10 @@ function ReaderContent() {
         <div className="mt-8 text-center">
           <button
             onClick={completeReading}
-            disabled={completing}
+            disabled={completing || completed}
             className="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors text-lg font-medium"
           >
-            {completing ? 'Menyimpan...' : '✓ Selesai Membaca'}
+            {completed ? '✓ Sudah Selesai' : completing ? 'Menyimpan...' : '✓ Selesai Membaca'}
           </button>
         </div>
       </div>

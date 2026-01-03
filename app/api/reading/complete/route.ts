@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const { planItemId } = await request.json()
+    const { planItemId, fallback } = await request.json()
 
     if (!planItemId) {
       return NextResponse.json({ error: 'Plan item ID is required' }, { status: 400 })
@@ -88,18 +88,24 @@ export async function POST(request: Request) {
     // 1 poin per hari (akan diberikan hanya saat semua bacaan hari itu selesai)
     const points = 0
 
-    // Find scheduled_date from the plan item
-    const { data: planItem, error: planItemError } = await supabaseAdmin
-      .from('reading_plan_items')
-      .select('scheduled_date')
-      .eq('id', planItemId)
-      .single()
+    let scheduleDate: string
+    if (fallback) {
+      // For fallback mode, use today's date in Jakarta timezone
+      scheduleDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(now)
+    } else {
+      // Find scheduled_date from the plan item
+      const { data: planItem, error: planItemError } = await supabaseAdmin
+        .from('reading_plan_items')
+        .select('scheduled_date')
+        .eq('id', planItemId)
+        .single()
 
-    if (planItemError || !planItem) {
-      return NextResponse.json({ error: 'Plan item not found' }, { status: 404 })
+      if (planItemError || !planItem) {
+        return NextResponse.json({ error: 'Plan item not found' }, { status: 404 })
+      }
+
+      scheduleDate = (planItem as any).scheduled_date as string
     }
-
-    const scheduleDate = (planItem as any).scheduled_date as string
 
     // Create reading log
     const { data: readingLog, error: logError } = await supabaseAdmin
@@ -133,7 +139,8 @@ export async function POST(request: Request) {
         readingLog,
         pointsEarned: points,
         dayCompleted: false,
-        message: 'Tidak ada bacaan terjadwal untuk hari ini.',
+        fallback,
+        message: fallback ? 'Bacaan selesai (mode fleksibel).' : 'Tidak ada bacaan terjadwal untuk hari ini.',
       })
     }
 
@@ -204,15 +211,19 @@ export async function POST(request: Request) {
       readingLog,
       pointsEarned: dayCompleted ? 1 : 0,
       dayCompleted,
-      updatedProfile,
+      fallback,
+      streak: (updatedProfile as any)?.current_streak || 0,
+      totalPoints: (updatedProfile as any)?.total_points || 0,
       progress: {
         completed: completedCount,
         total: totalCount,
         percentage: totalCount ? Math.round((completedCount / totalCount) * 100) : 0
       },
       message: dayCompleted 
-        ? 'Target hari ini tercapai!' 
-        : 'Reading completed successfully'
+        ? '🎉 Semua bacaan hari ini selesai! Anda mendapatkan 1 poin dan streak bertambah!' 
+        : fallback 
+        ? '✅ Bacaan selesai (mode fleksibel).' 
+        : '✅ Bacaan selesai. Lanjutkan bacaan lainnya hari ini!',
     })
   } catch (error) {
     console.error('[API Complete Reading POST] Error:', error)
