@@ -4,6 +4,9 @@ import { requireSupabaseAdmin } from '@/lib/supabase-admin'
 import { createClient as createSupabaseServerClient } from '@/lib/supabase-server'
 import type { TodayReadingResponse } from '@/types/reading'
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic'
+
 function getJakartaDateString(now: Date) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(now)
 }
@@ -67,13 +70,13 @@ export async function GET(request: Request) {
     }
 
     // Get user's completed items for today
-    const itemIds = items?.map || []
+    const itemIds = (items as any[])?.map((item) => item.id) || []
     const completedItemsResult = itemIds.length
       ? await supabaseAdmin
           .from('reading_logs')
           .select('plan_item_id')
           .eq('user_id', userIdFinal)
-          
+          .in('plan_item_id', itemIds)
       : { data: [], error: null }
 
     const completedItems = completedItemsResult.data

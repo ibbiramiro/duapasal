@@ -3,6 +3,9 @@ import { NextResponse } from 'next/server'
 import { requireSupabaseAdmin } from '@/lib/supabase-admin'
 import type { VersesResponse, BibleBook, BibleVerse } from '@/types/reading'
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)

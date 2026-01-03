@@ -1,12 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 import { ensureProfile } from '@/lib/auth'
 import { useSupabase } from '@/components/supabase-provider'
 
-export default function AuthCallbackPage() {
+// Force dynamic rendering
+export const dynamic = 'force-dynamic'
+
+function CallbackContent() {
   const supabase = useSupabase()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -130,5 +133,20 @@ export default function AuthCallbackPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={
+      <div className="mx-auto w-full max-w-md rounded border border-slate-200 bg-white p-6">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="text-sm text-slate-600 mt-2">Loading...</p>
+        </div>
+      </div>
+    }>
+      <CallbackContent />
+    </Suspense>
   )
 }
