@@ -59,22 +59,34 @@ function ReaderContent() {
   }
 
   async function completeReading() {
-    if (!data) return
+    if (!data) {
+      console.error('[Reader] No data available')
+      return
+    }
 
     try {
+      console.log('[Reader] Starting completeReading...')
       setCompleting(true)
 
       const { data: sessionData } = await supabase.auth.getSession()
       const accessToken = sessionData.session?.access_token
+      console.log('[Reader] Session exists:', !!accessToken)
       if (!accessToken) throw new Error('Session tidak ditemukan. Silakan login ulang.')
 
       // Get the plan item ID from session storage or pass it as parameter
       // For now, we'll need to find the matching plan item
+      console.log('[Reader] Fetching today reading...')
       const todayJson = await fetch('/api/reading/today', {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
-      }).then((res) => res.json())
+      }).then((res) => {
+        console.log('[Reader] today response status:', res.status)
+        return res.json()
+      })
+
+      console.log('[Reader] today items:', todayJson.items)
+      console.log('[Reader] Looking for match:', { bookId, startChapter, endChapter })
 
       const matchingItem = todayJson.items.find((item: any) => 
         item.book_id === parseInt(bookId!) && 
@@ -82,10 +94,13 @@ function ReaderContent() {
         item.end_chapter === parseInt(endChapter!)
       )
 
+      console.log('[Reader] Matching item:', matchingItem)
+
       if (!matchingItem) {
         throw new Error('Tidak dapat menemukan item bacaan yang sesuai')
       }
 
+      console.log('[Reader] Sending complete request...')
       const res = await fetch('/api/reading/complete', {
         method: 'POST',
         headers: {
@@ -97,11 +112,15 @@ function ReaderContent() {
         })
       })
 
+      console.log('[Reader] Complete response status:', res.status)
       if (!res.ok) {
-        throw new Error('Gagal menyelesaikan bacaan')
+        const errText = await res.text()
+        console.error('[Reader] Complete error response:', errText)
+        throw new Error(`Gagal menyelesaikan bacaan (${res.status}): ${errText}`)
       }
 
       const result = await res.json()
+      console.log('[Reader] Complete result:', result)
       
       // Show success message
       if (result.dayCompleted) {
@@ -119,6 +138,7 @@ function ReaderContent() {
       }, 1000)
 
     } catch (error) {
+      console.error('[Reader] Complete error:', error)
       alert(error instanceof Error ? error.message : 'Gagal menyelesaikan bacaan')
     } finally {
       setCompleting(false)

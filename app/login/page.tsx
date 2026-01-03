@@ -32,6 +32,7 @@ export default function LoginPage() {
 
     try {
       console.log('[Login] Sending OTP to:', email.trim())
+      console.log('[Login] redirectTo:', redirectTo)
       
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
@@ -66,6 +67,7 @@ export default function LoginPage() {
 
     try {
       console.log('[Login] Initiating Google OAuth')
+      console.log('[Login] redirectTo (Google):', redirectTo)
       
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
