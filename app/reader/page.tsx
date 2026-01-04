@@ -18,11 +18,15 @@ function ReaderContent() {
   const [fontSize, setFontSize] = useState(18)
   const [completing, setCompleting] = useState(false)
   const [completed, setCompleted] = useState(false)
+  const [autoSaving, setAutoSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const planItemIdFromQuery = searchParams.get('planItemId')
   const bookId = searchParams.get('bookId')
   const startChapter = searchParams.get('startChapter')
   const endChapter = searchParams.get('endChapter')
+
+  const [hasAutoSavedProgress, setHasAutoSavedProgress] = useState(false)
 
   useEffect(() => {
     if (!bookId || !startChapter || !endChapter) {
@@ -33,6 +37,82 @@ function ReaderContent() {
 
     loadVerses()
   }, [bookId, startChapter, endChapter])
+
+  useEffect(() => {
+    if (loading) return
+    if (completed) return
+    if (!planItemIdFromQuery) return
+    if (hasAutoSavedProgress) return
+
+    let cancelled = false
+
+    async function markProgressOnce() {
+      if (cancelled) return
+      setAutoSaving(true)
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const accessToken = sessionData.session?.access_token
+        if (!accessToken) return
+
+        const res = await fetch('/api/reading/complete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ planItemId: planItemIdFromQuery }),
+        })
+
+        if (!res.ok) {
+          const _errText = await res.text()
+          return
+        }
+
+        const result = await res.json()
+
+        setHasAutoSavedProgress(true)
+        if (result?.alreadyCompleted) {
+          setCompleted(true)
+        }
+
+        try {
+          localStorage.setItem('duapasal:last_reading_complete', JSON.stringify({
+            at: Date.now(),
+            planItemId: planItemIdFromQuery,
+          }))
+        } catch (_e) {
+          // ignore
+        }
+        try {
+          const bc = new BroadcastChannel('duapasal')
+          bc.postMessage({ type: 'reading_completed', at: Date.now(), planItemId: planItemIdFromQuery })
+          bc.close()
+        } catch (_e) {
+          // ignore
+        }
+      } finally {
+        setAutoSaving(false)
+      }
+    }
+
+    const handler = () => {
+      markProgressOnce()
+      window.removeEventListener('scroll', handler)
+      window.removeEventListener('click', handler)
+      window.removeEventListener('touchstart', handler)
+    }
+
+    window.addEventListener('scroll', handler, { passive: true })
+    window.addEventListener('click', handler)
+    window.addEventListener('touchstart', handler, { passive: true })
+
+    return () => {
+      cancelled = true
+      window.removeEventListener('scroll', handler)
+      window.removeEventListener('click', handler)
+      window.removeEventListener('touchstart', handler)
+    }
+  }, [loading, completed, planItemIdFromQuery, hasAutoSavedProgress])
 
   async function loadVerses() {
     try {
@@ -74,37 +154,8 @@ function ReaderContent() {
       console.log('[Reader] Session exists:', !!accessToken)
       if (!accessToken) throw new Error('Session tidak ditemukan. Silakan login ulang.')
 
-      // Get the plan item ID from session storage or pass it as parameter
-      // For now, we'll need to find the matching plan item
-      console.log('[Reader] Fetching today reading...')
-      const todayJson = await fetch('/api/reading/today', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }).then((res) => {
-        console.log('[Reader] today response status:', res.status)
-        return res.json()
-      })
-
-      console.log('[Reader] today items:', todayJson.items)
-      console.log('[Reader] Looking for match:', { bookId, startChapter, endChapter })
-
-      const matchingItem = todayJson.items.find((item: any) => 
-        item.book_id === parseInt(bookId!) && 
-        item.start_chapter === parseInt(startChapter!) &&
-        item.end_chapter === parseInt(endChapter!)
-      )
-
-      console.log('[Reader] Matching item:', matchingItem)
-
-      let planItemId: string
-      if (matchingItem) {
-        planItemId = matchingItem.id
-      } else {
-        // Fallback: create a temporary plan item ID based on book/chapters
-        // This allows completion even if not in today's schedule
-        console.warn('[Reader] No matching item found, using fallback')
-        planItemId = `fallback-${bookId}-${startChapter}-${endChapter}`
+      if (!planItemIdFromQuery) {
+        throw new Error('Plan item ID tidak ditemukan. Silakan kembali ke Dashboard dan buka bacaan dari daftar Bacaan Hari Ini.')
       }
 
       console.log('[Reader] Sending complete request...')
@@ -115,8 +166,7 @@ function ReaderContent() {
           Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
-          planItemId,
-          fallback: !matchingItem // Flag to indicate fallback mode
+          planItemId: planItemIdFromQuery,
         })
       })
 
@@ -134,7 +184,10 @@ function ReaderContent() {
       if (result.dayCompleted) {
         alert(`🎉 ${result.message}\nAnda mendapatkan ${result.pointsEarned} poin!`)
       } else {
-        alert(`✅ Bacaan selesai! Anda mendapatkan ${result.pointsEarned} poin.`)
+        alert(result?.alreadyCompleted
+          ? `✅ ${result.message}`
+          : `✅ Bacaan selesai! Anda mendapatkan ${result.pointsEarned} poin.`
+        )
       }
 
       // Mark as completed locally to disable button
@@ -144,14 +197,14 @@ function ReaderContent() {
       try {
         localStorage.setItem('duapasal:last_reading_complete', JSON.stringify({
           at: Date.now(),
-          planItemId,
+          planItemId: planItemIdFromQuery,
         }))
       } catch (_e) {
         // ignore
       }
       try {
         const bc = new BroadcastChannel('duapasal')
-        bc.postMessage({ type: 'reading_completed', at: Date.now(), planItemId })
+        bc.postMessage({ type: 'reading_completed', at: Date.now(), planItemId: planItemIdFromQuery })
         bc.close()
       } catch (_e) {
         // ignore
@@ -250,6 +303,9 @@ function ReaderContent() {
                 </button>
               </div>
             </div>
+            {autoSaving ? (
+              <div className="text-sm text-slate-500">Menyimpan progress...</div>
+            ) : null}
           </div>
         </div>
 

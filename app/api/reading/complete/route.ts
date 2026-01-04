@@ -68,7 +68,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Plan item ID is required' }, { status: 400 })
     }
 
-    // Check if already completed
+    const now = new Date()
+    // 1 poin per hari (akan diberikan hanya saat semua bacaan hari itu selesai)
+    const points = 0
+
+    const isFallbackId = typeof planItemId === 'string' && planItemId.startsWith('fallback-')
+    const fallbackMode = Boolean(fallback) || isFallbackId
+
+    // Check if already completed (idempotent behavior)
     const { data: existingLog, error: existingError } = await supabaseAdmin
       .from('reading_logs')
       .select('*')
@@ -80,47 +87,44 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: existingError.message }, { status: 500 })
     }
 
-    if (existingLog) {
-      return NextResponse.json({ error: 'Reading already completed' }, { status: 400 })
-    }
-
-    const now = new Date()
-    // 1 poin per hari (akan diberikan hanya saat semua bacaan hari itu selesai)
-    const points = 0
-
     let scheduleDate: string
-    if (fallback) {
-      // For fallback mode, use today's date in Jakarta timezone
+    if (fallbackMode) {
       scheduleDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(now)
     } else {
-      // Find scheduled_date from the plan item
       const { data: planItem, error: planItemError } = await supabaseAdmin
         .from('reading_plan_items')
         .select('scheduled_date')
         .eq('id', planItemId)
-        .single()
+        .maybeSingle()
 
       if (planItemError || !planItem) {
-        return NextResponse.json({ error: 'Plan item not found' }, { status: 404 })
+        // If plan item can't be found, gracefully treat it as fallback so UI can still proceed.
+        scheduleDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(now)
+      } else {
+        scheduleDate = (planItem as any).scheduled_date as string
       }
-
-      scheduleDate = (planItem as any).scheduled_date as string
     }
 
-    // Create reading log
-    const { data: readingLog, error: logError } = await supabaseAdmin
-      .from('reading_logs')
-      .insert({
-        user_id: userId,
-        plan_item_id: planItemId,
-        completed_at: now.toISOString(),
-        points_earned: points,
-      })
-      .select()
-      .single()
+    const alreadyCompleted = Boolean(existingLog)
 
-    if (logError) {
-      return NextResponse.json({ error: logError.message }, { status: 500 })
+    let readingLog = existingLog
+    if (!readingLog) {
+      const { data: inserted, error: logError } = await supabaseAdmin
+        .from('reading_logs')
+        .insert({
+          user_id: userId,
+          plan_item_id: planItemId,
+          completed_at: now.toISOString(),
+          points_earned: points,
+        })
+        .select()
+        .single()
+
+      if (logError) {
+        return NextResponse.json({ error: logError.message }, { status: 500 })
+      }
+
+      readingLog = inserted
     }
 
     // Get all items for this schedule date
@@ -160,12 +164,12 @@ export async function POST(request: Request) {
     const dayCompleted = completedCount === totalCount
 
     let updatedProfile = null
-    console.log('[Complete] dayCompleted?', { dayCompleted, completedCount, totalCount, fallback })
-    if (dayCompleted) {
+    console.log('[Complete] dayCompleted?', { dayCompleted, completedCount, totalCount, fallback: fallbackMode, alreadyCompleted })
+    if (dayCompleted && !alreadyCompleted) {
       // Update user's total points and streak
       const { data: currentProfile, error: profileError } = await supabaseAdmin
         .from('profiles')
-        .select('total_points, current_streak')
+        .select('total_points, current_streak, longest_streak')
         .eq('id', userId)
         .single()
 
@@ -184,6 +188,8 @@ export async function POST(request: Request) {
       const prevStreak = currentProfile?.current_streak || 0
       const newStreak = yesterdayCompleted ? prevStreak + 1 : 1
       const newTotalPoints = (currentProfile?.total_points || 0) + 1
+      const prevLongest = (currentProfile as any)?.longest_streak || 0
+      const newLongest = Math.max(prevLongest, newStreak)
 
       console.log('[Complete] Computed new values:', { prevStreak, yesterdayCompleted, newStreak, newTotalPoints })
 
@@ -204,6 +210,7 @@ export async function POST(request: Request) {
         .update({
           total_points: newTotalPoints,
           current_streak: newStreak,
+          longest_streak: newLongest,
           updated_at: new Date().toISOString(),
         })
         .eq('id', userId)
@@ -223,7 +230,8 @@ export async function POST(request: Request) {
       readingLog,
       pointsEarned: dayCompleted ? 1 : 0,
       dayCompleted,
-      fallback,
+      fallback: fallbackMode,
+      alreadyCompleted,
       streak: (updatedProfile as any)?.current_streak || 0,
       totalPoints: (updatedProfile as any)?.total_points || 0,
       progress: {
@@ -231,10 +239,12 @@ export async function POST(request: Request) {
         total: totalCount,
         percentage: totalCount ? Math.round((completedCount / totalCount) * 100) : 0
       },
-      message: dayCompleted 
-        ? '🎉 Semua bacaan hari ini selesai! Anda mendapatkan 1 poin dan streak bertambah!' 
-        : fallback 
-        ? '✅ Bacaan selesai (mode fleksibel).' 
+      message: dayCompleted
+        ? '🎉 Semua bacaan hari ini selesai! Anda mendapatkan 1 poin dan streak bertambah!'
+        : fallbackMode
+        ? '✅ Bacaan selesai (mode fleksibel).'
+        : alreadyCompleted
+        ? '✅ Bacaan sudah tercatat sebelumnya.'
         : '✅ Bacaan selesai. Lanjutkan bacaan lainnya hari ini!',
     })
   } catch (error) {

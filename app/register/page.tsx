@@ -2,6 +2,7 @@
 
 import type { FormEvent } from 'react'
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 import { useSupabase } from '@/components/supabase-provider'
 import { logEmail } from '@/lib/email'
@@ -53,6 +54,11 @@ type PastorOption = {
   is_main_pastor: boolean
 }
 
+type LocationOption = {
+  id: string
+  text: string
+}
+
 const MONTHS = [
   'Januari',
   'Februari',
@@ -70,12 +76,23 @@ const MONTHS = [
 
 export default function RegisterPage() {
   const supabase = useSupabase()
+  const router = useRouter()
   const [form, setForm] = useState<FormState>(initialState)
   const [status, setStatus] = useState<'idle' | 'loading' | 'sent' | 'error'>('idle')
   const [message, setMessage] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof FormState | 'email_exists' | 'dob_day' | 'dob_year', string>>>({})
   const [churches, setChurches] = useState<ChurchOption[]>([])
   const [pastors, setPastors] = useState<PastorOption[]>([])
   const [loadingOptions, setLoadingOptions] = useState(false)
+
+  const [provinces, setProvinces] = useState<LocationOption[]>([])
+  const [regencies, setRegencies] = useState<LocationOption[]>([])
+  const [districts, setDistricts] = useState<LocationOption[]>([])
+  const [postalCodes, setPostalCodes] = useState<LocationOption[]>([])
+
+  const [provinceId, setProvinceId] = useState<string>('')
+  const [regencyId, setRegencyId] = useState<string>('')
+  const [districtId, setDistrictId] = useState<string>('')
 
   const redirectTo = useMemo(() => {
     if (typeof window === 'undefined') return ''
@@ -84,6 +101,57 @@ export default function RegisterPage() {
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
+    setFieldErrors((prev) => {
+      if (!(key in prev)) return prev
+      const next = { ...prev }
+      delete (next as any)[key]
+      if (key === 'email' && (next as any).email_exists) {
+        delete (next as any).email_exists
+      }
+      return next
+    })
+  }
+
+  async function checkEmailExists(emailValue: string) {
+    const email = emailValue.trim().toLowerCase()
+    if (!email) return
+
+    try {
+      const res = await fetch(`/api/auth/check-email?email=${encodeURIComponent(email)}`)
+      if (!res.ok) return
+      const json = (await res.json()) as { exists?: boolean }
+      if (json.exists) {
+        setFieldErrors((prev) => ({ ...prev, email_exists: 'Akun email sudah pernah register.' }))
+      } else {
+        setFieldErrors((prev) => {
+          if (!prev.email_exists) return prev
+          const next = { ...prev }
+          delete (next as any).email_exists
+          return next
+        })
+      }
+    } catch (_err) {
+      // ignore
+    }
+  }
+
+  function validateDobDay(dd: string) {
+    const value = dd.trim()
+    if (!value) return ''
+    if (value.length !== 2) return 'Isi 2 digit (01-31).'
+    const n = Number(value)
+    if (Number.isNaN(n) || n < 1 || n > 31) return 'Isi 2 digit (01-31).'
+    return ''
+  }
+
+  function validateDobYear(yyyy: string) {
+    const value = yyyy.trim()
+    if (!value) return ''
+    if (value.length !== 4) return 'Isi 4 digit (YYYY).'
+    const n = Number(value)
+    const currentYear = new Date().getFullYear()
+    if (Number.isNaN(n) || n < 1900 || n > currentYear) return 'Tahun tidak valid.'
+    return ''
   }
 
   useEffect(() => {
@@ -114,7 +182,18 @@ export default function RegisterPage() {
       }
     }
 
+    async function loadProvinces() {
+      try {
+        const res = await fetch('/api/locations/provinces')
+        const json = (await res.json()) as { data?: LocationOption[] }
+        if (!cancelled) setProvinces(json.data ?? [])
+      } catch (_error) {
+        if (!cancelled) setProvinces([])
+      }
+    }
+
     loadOptions()
+    loadProvinces()
 
     return () => {
       cancelled = true
@@ -132,7 +211,7 @@ export default function RegisterPage() {
     const yyyy = form.dob_year.trim()
 
     if (!dd || !mm || !yyyy) return ''
-    if (dd.length !== 2 || yyyy.length !== 4) return ''
+    if (validateDobDay(dd) || validateDobYear(yyyy)) return ''
 
     const monthIndex = MONTHS.findIndex((m) => m.toLowerCase() === mm.toLowerCase())
     if (monthIndex < 0) return ''
@@ -145,13 +224,11 @@ export default function RegisterPage() {
     e.preventDefault()
     setStatus('loading')
     setMessage(null)
+    setFieldErrors({})
 
     const {
       email,
       full_name,
-      dob_day,
-      dob_month,
-      dob_year,
       phone,
       address_line,
       province,
@@ -163,16 +240,54 @@ export default function RegisterPage() {
       reminder_opt_in,
     } = form
 
-    if (!dobIso) {
+    const emailTrimmed = email.trim().toLowerCase()
+    if (!emailTrimmed) {
       setStatus('error')
-      setMessage('Tanggal lahir tidak valid. Pastikan tanggal 2 digit, bulan sesuai pilihan, tahun 4 digit.')
+      setFieldErrors((prev) => ({ ...prev, email: 'Email wajib diisi.' }))
       return
     }
 
-    await logEmail(email, 'register', 'sending', null, form)
+    await checkEmailExists(emailTrimmed)
+    const emailExistsNow = await (async () => {
+      try {
+        const res = await fetch(`/api/auth/check-email?email=${encodeURIComponent(emailTrimmed)}`)
+        if (!res.ok) return false
+        const json = (await res.json()) as { exists?: boolean }
+        return Boolean(json.exists)
+      } catch (_err) {
+        return false
+      }
+    })()
+
+    if (emailExistsNow) {
+      setStatus('error')
+      setFieldErrors((prev) => ({ ...prev, email_exists: 'Akun email sudah pernah register.' }))
+      return
+    }
+
+    const ddError = validateDobDay(form.dob_day)
+    const yyyyError = validateDobYear(form.dob_year)
+
+    if (ddError || yyyyError) {
+      setStatus('error')
+      setFieldErrors((prev) => ({
+        ...prev,
+        ...(ddError ? { dob_day: ddError } : {}),
+        ...(yyyyError ? { dob_year: yyyyError } : {}),
+      }))
+      return
+    }
+
+    if (!dobIso) {
+      setStatus('error')
+      setMessage('Tanggal lahir tidak valid. Pastikan bulan dipilih dan format tanggal benar.')
+      return
+    }
+
+    await logEmail(emailTrimmed, 'register', 'sending', null, form)
 
     const { error } = await supabase.auth.signInWithOtp({
-      email,
+      email: emailTrimmed,
       options: {
         emailRedirectTo: redirectTo,
         data: {
@@ -198,16 +313,26 @@ export default function RegisterPage() {
           ? 'Supabase tidak dapat mengirim email. Pastikan SMTP service sudah dikonfigurasi di Auth Settings.'
           : error.message
       setMessage(readable)
-      await logEmail(email, 'register', 'error', error, form)
+      await logEmail(emailTrimmed, 'register', 'error', error, form)
       return
     }
 
     setStatus('sent')
     setMessage(
-      'Akun berhasil didaftarkan. Silakan cek email untuk verifikasi melalui magic link sebelum login.',
+      'Pendaftaran berhasil. Silakan cek email untuk verifikasi melalui magic link. Mengarahkan ke halaman login dalam 3 detik...',
     )
-    await logEmail(email, 'register', 'sent', null, form)
+    await logEmail(emailTrimmed, 'register', 'sent', null, form)
     setForm(initialState)
+    setProvinceId('')
+    setRegencyId('')
+    setDistrictId('')
+    setRegencies([])
+    setDistricts([])
+    setPostalCodes([])
+
+    setTimeout(() => {
+      router.push('/login')
+    }, 3000)
   }
 
   const isSubmitting = status === 'loading'
@@ -215,6 +340,15 @@ export default function RegisterPage() {
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6">
       <div>
+        <a
+          className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+          href="/login"
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Kembali ke Login
+        </a>
         <h1 className="text-3xl font-semibold">Daftar Akun Jemaat</h1>
         <p className="text-sm text-slate-600">
           Isi informasi dasar Anda, kami akan mengirimkan magic link untuk verifikasi email.
@@ -228,11 +362,14 @@ export default function RegisterPage() {
             <input
               value={form.email}
               onChange={(e) => updateField('email', e.target.value)}
+              onBlur={() => checkEmailExists(form.email)}
               type="email"
               required
               placeholder="nama@email.com"
               className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
             />
+            {fieldErrors.email ? <p className="text-sm text-red-600">{fieldErrors.email}</p> : null}
+            {fieldErrors.email_exists ? <p className="text-sm text-red-600">{fieldErrors.email_exists}</p> : null}
           </div>
 
           <div className="grid gap-2">
@@ -252,7 +389,14 @@ export default function RegisterPage() {
             <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
               <input
                 value={form.dob_day}
-                onChange={(e) => updateField('dob_day', e.target.value.replace(/\D/g, '').slice(0, 2))}
+                onChange={(e) => {
+                  const next = e.target.value.replace(/\D/g, '').slice(0, 2)
+                  updateField('dob_day', next)
+                }}
+                onBlur={() => {
+                  const err = validateDobDay(form.dob_day)
+                  setFieldErrors((prev) => ({ ...prev, ...(err ? { dob_day: err } : {}) }))
+                }}
                 type="text"
                 inputMode="numeric"
                 required
@@ -274,7 +418,14 @@ export default function RegisterPage() {
               </select>
               <input
                 value={form.dob_year}
-                onChange={(e) => updateField('dob_year', e.target.value.replace(/\D/g, '').slice(0, 4))}
+                onChange={(e) => {
+                  const next = e.target.value.replace(/\D/g, '').slice(0, 4)
+                  updateField('dob_year', next)
+                }}
+                onBlur={() => {
+                  const err = validateDobYear(form.dob_year)
+                  setFieldErrors((prev) => ({ ...prev, ...(err ? { dob_year: err } : {}) }))
+                }}
                 type="text"
                 inputMode="numeric"
                 required
@@ -282,6 +433,8 @@ export default function RegisterPage() {
                 className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
               />
             </div>
+            {fieldErrors.dob_day ? <p className="text-sm text-red-600">{fieldErrors.dob_day}</p> : null}
+            {fieldErrors.dob_year ? <p className="text-sm text-red-600">{fieldErrors.dob_year}</p> : null}
           </div>
 
           <div className="grid gap-2">
@@ -335,46 +488,140 @@ export default function RegisterPage() {
           <div className="grid gap-2 md:grid-cols-2">
             <div className="grid gap-2">
               <label className="text-sm font-medium">Provinsi</label>
-              <input
-                value={form.province}
-                onChange={(e) => updateField('province', e.target.value)}
-                type="text"
-                placeholder="Contoh: DKI Jakarta"
-                className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
-              />
+              <select
+                value={provinceId}
+                onChange={async (e) => {
+                  const nextId = e.target.value
+                  setProvinceId(nextId)
+                  const nextText = provinces.find((p) => p.id === nextId)?.text ?? ''
+                  updateField('province', nextText)
+                  updateField('city', '')
+                  updateField('district', '')
+                  updateField('postal_code', '')
+                  setRegencyId('')
+                  setDistrictId('')
+                  setRegencies([])
+                  setDistricts([])
+                  setPostalCodes([])
+
+                  if (!nextId) return
+                  try {
+                    const res = await fetch(`/api/locations/regencies?province_id=${encodeURIComponent(nextId)}`)
+                    const json = (await res.json()) as { data?: LocationOption[] }
+                    setRegencies(json.data ?? [])
+                  } catch (_err) {
+                    setRegencies([])
+                  }
+                }}
+                required
+                className="w-full rounded border border-slate-200 bg-white px-3 py-2 outline-none focus:border-indigo-400"
+              >
+                <option value="">Pilih provinsi</option>
+                {provinces.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.text}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="grid gap-2">
               <label className="text-sm font-medium">Kota / Kabupaten</label>
-              <input
-                value={form.city}
-                onChange={(e) => updateField('city', e.target.value)}
-                type="text"
-                placeholder="Contoh: Jakarta Selatan"
-                className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
-              />
+              <select
+                value={regencyId}
+                onChange={async (e) => {
+                  const nextId = e.target.value
+                  setRegencyId(nextId)
+                  const nextText = regencies.find((r) => r.id === nextId)?.text ?? ''
+                  updateField('city', nextText)
+                  updateField('district', '')
+                  updateField('postal_code', '')
+                  setDistrictId('')
+                  setDistricts([])
+                  setPostalCodes([])
+
+                  if (!nextId) return
+                  try {
+                    const res = await fetch(`/api/locations/districts?regency_id=${encodeURIComponent(nextId)}`)
+                    const json = (await res.json()) as { data?: LocationOption[] }
+                    setDistricts(json.data ?? [])
+                  } catch (_err) {
+                    setDistricts([])
+                  }
+                }}
+                required
+                disabled={!provinceId}
+                className="w-full rounded border border-slate-200 bg-white px-3 py-2 outline-none focus:border-indigo-400 disabled:bg-slate-50"
+              >
+                <option value="">{provinceId ? 'Pilih kota/kabupaten' : 'Pilih provinsi dulu'}</option>
+                {regencies.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.text}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
           <div className="grid gap-2 md:grid-cols-2">
             <div className="grid gap-2">
               <label className="text-sm font-medium">Kecamatan</label>
-              <input
-                value={form.district}
-                onChange={(e) => updateField('district', e.target.value)}
-                type="text"
-                placeholder="Contoh: Kebayoran Baru"
-                className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
-              />
+              <select
+                value={districtId}
+                onChange={async (e) => {
+                  const nextId = e.target.value
+                  setDistrictId(nextId)
+                  const nextText = districts.find((d) => d.id === nextId)?.text ?? ''
+                  updateField('district', nextText)
+                  updateField('postal_code', '')
+                  setPostalCodes([])
+
+                  if (!regencyId || !nextId) return
+                  try {
+                    const res = await fetch(
+                      `/api/locations/postal-codes?regency_id=${encodeURIComponent(regencyId)}&district_id=${encodeURIComponent(nextId)}`
+                    )
+                    const json = (await res.json()) as { data?: LocationOption[] }
+                    const nextPostalCodes = json.data ?? []
+                    setPostalCodes(nextPostalCodes)
+                    if (nextPostalCodes.length === 0) {
+                      updateField('postal_code', '-')
+                    }
+                  } catch (_err) {
+                    setPostalCodes([])
+                    updateField('postal_code', '-')
+                  }
+                }}
+                required
+                disabled={!regencyId}
+                className="w-full rounded border border-slate-200 bg-white px-3 py-2 outline-none focus:border-indigo-400 disabled:bg-slate-50"
+              >
+                <option value="">{regencyId ? 'Pilih kecamatan' : 'Pilih kota dulu'}</option>
+                {districts.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.text}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="grid gap-2">
               <label className="text-sm font-medium">Kode Pos</label>
-              <input
+              <select
                 value={form.postal_code}
                 onChange={(e) => updateField('postal_code', e.target.value)}
-                type="text"
-                placeholder="Contoh: 12190"
-                className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
-              />
+                required={Boolean(districtId) && postalCodes.length > 0}
+                disabled={!districtId}
+                className="w-full rounded border border-slate-200 bg-white px-3 py-2 outline-none focus:border-indigo-400 disabled:bg-slate-50"
+              >
+                <option value="">{districtId ? 'Pilih kode pos' : 'Pilih kecamatan dulu'}</option>
+                {districtId && postalCodes.length === 0 ? (
+                  <option value="-">-</option>
+                ) : null}
+                {postalCodes.map((k) => (
+                  <option key={k.id} value={k.text}>
+                    {k.text}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -410,10 +657,12 @@ export default function RegisterPage() {
             disabled={isSubmitting}
             className="mt-2 w-full rounded bg-indigo-600 px-4 py-2 text-white disabled:opacity-60"
           >
-            {isSubmitting ? 'Mengirim...' : 'Kirim Magic Link'}
+            {isSubmitting ? 'Memproses...' : 'Daftar Sekarang'}
           </button>
 
-          {message ? <p className="text-sm text-slate-700">{message}</p> : null}
+          {message ? (
+            <p className={status === 'error' ? 'text-sm text-red-600' : 'text-sm text-slate-700'}>{message}</p>
+          ) : null}
         </form>
       </div>
 

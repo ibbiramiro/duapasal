@@ -89,7 +89,7 @@ export async function GET(request: Request) {
     // Get user's total points and streak
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('total_points, current_streak')
+      .select('total_points, current_streak, longest_streak')
       .eq('id', userIdFinal)
       .single()
 
@@ -113,18 +113,67 @@ export async function GET(request: Request) {
 
     const todayPoints = todayPointsResult.data?.reduce((sum, log) => sum + (log.points_earned || 0), 0) || 0
 
+    // Reset streak to 0 if user missed yesterday and still has a streak.
+    // This keeps the streak_poin behavior (must be consecutive days).
+    const currentStreak = profile?.current_streak || 0
+    let effectiveStreak = currentStreak
+    if (currentStreak > 0) {
+      const { startIso: todayStartIso } = getJakartaDayBoundsIso(today)
+      const todayStart = new Date(todayStartIso)
+      const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000)
+      const yesterday = getJakartaDateString(yesterdayStart)
+
+      const { data: yesterdayItems, error: yesterdayItemsError } = await supabaseAdmin
+        .from('reading_plan_items')
+        .select('id')
+        .eq('scheduled_date', yesterday)
+
+      if (!yesterdayItemsError) {
+        const yesterdayIds = yesterdayItems?.map((i) => i.id) || []
+        let yesterdayCompleted = false
+        if (yesterdayIds.length > 0) {
+          const { data: yLogs, error: yLogsError } = await supabaseAdmin
+            .from('reading_logs')
+            .select('plan_item_id')
+            .eq('user_id', userIdFinal)
+            .in('plan_item_id', yesterdayIds)
+          if (!yLogsError) {
+            yesterdayCompleted = (yLogs?.length || 0) >= yesterdayIds.length
+          }
+        }
+
+        if (!yesterdayCompleted) {
+          await supabaseAdmin
+            .from('profiles')
+            .update({
+              current_streak: 0,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', userIdFinal)
+
+          effectiveStreak = 0
+        }
+      }
+    }
+
     const response: TodayReadingResponse = {
       date: today,
       items: items || [],
       completedItems: completedItems?.map((item) => item.plan_item_id) || [],
       userStats: {
         totalPoints: profile?.total_points || 0,
-        currentStreak: profile?.current_streak || 0,
+        currentStreak: effectiveStreak,
         todayPoints,
       },
     }
 
-    return NextResponse.json(response)
+    return NextResponse.json(response, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        Pragma: 'no-cache',
+        Expires: '0',
+      },
+    })
   } catch (error) {
     console.error('[API Today Reading GET] Error:', error)
     return NextResponse.json(

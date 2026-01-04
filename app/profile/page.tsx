@@ -92,6 +92,24 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
 
+  const [fieldErrors, setFieldErrors] = useState<
+    Partial<Record<'dob_day' | 'dob_year' | 'province' | 'city_regency' | 'district' | 'postal_code' | 'full_address', string>>
+  >({})
+
+  type LocationOption = {
+    id: string
+    text: string
+  }
+
+  const [provinces, setProvinces] = useState<LocationOption[]>([])
+  const [regencies, setRegencies] = useState<LocationOption[]>([])
+  const [districts, setDistricts] = useState<LocationOption[]>([])
+  const [postalCodes, setPostalCodes] = useState<LocationOption[]>([])
+
+  const [provinceId, setProvinceId] = useState<string>('')
+  const [regencyId, setRegencyId] = useState<string>('')
+  const [districtId, setDistrictId] = useState<string>('')
+
   const initialDob = useMemo(() => splitDob(me?.profile?.dob ?? null), [me?.profile?.dob])
 
   const [form, setForm] = useState({
@@ -198,18 +216,140 @@ export default function ProfilePage() {
     return pastors.filter((p) => p.church_id === form.church_id && p.is_main_pastor === true)
   }, [pastors, form.church_id])
 
+  function validateDobDay(dd: string) {
+    const value = dd.trim()
+    if (!value) return ''
+    if (value.length !== 2) return 'Isi 2 digit (01-31).'
+    const num = Number(value)
+    if (!Number.isFinite(num) || num < 1 || num > 31) return 'Isi 2 digit (01-31).'
+    return ''
+  }
+
+  function validateDobYear(yyyy: string) {
+    const value = yyyy.trim()
+    if (!value) return ''
+    if (value.length !== 4) return 'Isi 4 digit (YYYY).'
+    const num = Number(value)
+    if (!Number.isFinite(num) || num < 1900) return 'Isi 4 digit (YYYY).'
+    return ''
+  }
+
   function updateField<K extends keyof typeof form>(field: K, value: typeof form[K]) {
     setForm((prev) => ({ ...prev, [field]: value }))
+    setFieldErrors((prev) => {
+      if (!(field as any in prev)) return prev
+      const next = { ...prev }
+      delete (next as any)[field as any]
+      return next
+    })
   }
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadProvinces() {
+      try {
+        const res = await fetch('/api/locations/provinces')
+        const json = (await res.json()) as { data?: LocationOption[] }
+        if (!cancelled) setProvinces(json.data ?? [])
+      } catch (_e) {
+        if (!cancelled) setProvinces([])
+      }
+    }
+    loadProvinces()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!me?.profile) return
+    if (provinces.length === 0) return
+
+    const profile = me.profile
+
+    let cancelled = false
+
+    async function hydrateLocationOptionsFromProfile() {
+      const provinceText = (profile.province ?? '').trim()
+      const regencyText = (profile.city_regency ?? '').trim()
+      const districtText = (profile.district ?? '').trim()
+      const postalCodeText = (profile.postal_code ?? '').trim()
+
+      if (!provinceText) return
+
+      const province = provinces.find((p) => p.text === provinceText)
+      if (!province) return
+
+      setProvinceId(province.id)
+
+      try {
+        const regRes = await fetch(`/api/locations/regencies?province_id=${encodeURIComponent(province.id)}`)
+        const regJson = (await regRes.json()) as { data?: LocationOption[] }
+        if (cancelled) return
+        const regData = regJson.data ?? []
+        setRegencies(regData)
+
+        const regency = regData.find((r) => r.text === regencyText)
+        if (!regency) return
+        setRegencyId(regency.id)
+
+        const distRes = await fetch(`/api/locations/districts?regency_id=${encodeURIComponent(regency.id)}`)
+        const distJson = (await distRes.json()) as { data?: LocationOption[] }
+        if (cancelled) return
+        const distData = distJson.data ?? []
+        setDistricts(distData)
+
+        const district = distData.find((d) => d.text === districtText)
+        if (!district) return
+        setDistrictId(district.id)
+
+        const pcRes = await fetch(
+          `/api/locations/postal-codes?regency_id=${encodeURIComponent(regency.id)}&district_id=${encodeURIComponent(district.id)}`
+        )
+        const pcJson = (await pcRes.json()) as { data?: LocationOption[] }
+        if (cancelled) return
+        const pcData = pcJson.data ?? []
+        setPostalCodes(pcData)
+
+        if (postalCodeText && pcData.some((p) => p.text === postalCodeText)) {
+          updateField('postal_code', postalCodeText)
+        }
+      } catch (_e) {
+        if (cancelled) return
+        setRegencies([])
+        setDistricts([])
+        setPostalCodes([])
+      }
+    }
+
+    hydrateLocationOptionsFromProfile()
+
+    return () => {
+      cancelled = true
+    }
+  }, [me?.profile, provinces])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setSaving(true)
     setMessage(null)
+    setFieldErrors({})
 
     try {
       const { data: sessionData } = await supabase.auth.getSession()
       const accessToken = sessionData.session?.access_token
+
+      const ddError = validateDobDay(form.dob_day)
+      const yyyyError = validateDobYear(form.dob_year)
+      if (ddError || yyyyError) {
+        setFieldErrors((prev) => ({
+          ...prev,
+          ...(ddError ? { dob_day: ddError } : {}),
+          ...(yyyyError ? { dob_year: yyyyError } : {}),
+        }))
+        setSaving(false)
+        return
+      }
 
       const dobIso = composeDob(form.dob_day, form.dob_month, form.dob_year)
 
@@ -360,7 +500,14 @@ export default function ProfilePage() {
                 <input
                   type="text"
                   value={form.dob_day}
-                  onChange={(e) => updateField('dob_day', e.target.value)}
+                  onChange={(e) => {
+                    const next = e.target.value.replace(/\D/g, '').slice(0, 2)
+                    updateField('dob_day', next)
+                  }}
+                  onBlur={() => {
+                    const err = validateDobDay(form.dob_day)
+                    setFieldErrors((prev) => ({ ...prev, ...(err ? { dob_day: err } : {}) }))
+                  }}
                   placeholder="DD"
                   maxLength={2}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
@@ -380,12 +527,21 @@ export default function ProfilePage() {
                 <input
                   type="text"
                   value={form.dob_year}
-                  onChange={(e) => updateField('dob_year', e.target.value)}
+                  onChange={(e) => {
+                    const next = e.target.value.replace(/\D/g, '').slice(0, 4)
+                    updateField('dob_year', next)
+                  }}
+                  onBlur={() => {
+                    const err = validateDobYear(form.dob_year)
+                    setFieldErrors((prev) => ({ ...prev, ...(err ? { dob_year: err } : {}) }))
+                  }}
                   placeholder="YYYY"
                   maxLength={4}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
               </div>
+              {fieldErrors.dob_day ? <p className="mt-1 text-xs text-red-600">{fieldErrors.dob_day}</p> : null}
+              {fieldErrors.dob_year ? <p className="mt-1 text-xs text-red-600">{fieldErrors.dob_year}</p> : null}
             </div>
 
             {/* No HP */}
@@ -488,46 +644,138 @@ export default function ProfilePage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Provinsi</label>
-                  <input
-                    type="text"
-                    value={form.province}
-                    onChange={(e) => updateField('province', e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="Masukkan provinsi"
-                  />
+                  <select
+                    value={provinceId}
+                    onChange={async (e) => {
+                      const nextId = e.target.value
+                      setProvinceId(nextId)
+                      const nextText = provinces.find((p) => p.id === nextId)?.text ?? ''
+                      updateField('province', nextText)
+                      updateField('city_regency', '')
+                      updateField('district', '')
+                      updateField('postal_code', '')
+                      setRegencyId('')
+                      setDistrictId('')
+                      setRegencies([])
+                      setDistricts([])
+                      setPostalCodes([])
+
+                      if (!nextId) return
+                      try {
+                        const res = await fetch(`/api/locations/regencies?province_id=${encodeURIComponent(nextId)}`)
+                        const json = (await res.json()) as { data?: LocationOption[] }
+                        setRegencies(json.data ?? [])
+                      } catch (_err) {
+                        setRegencies([])
+                      }
+                    }}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    required
+                  >
+                    <option value="">Pilih provinsi</option>
+                    {provinces.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.text}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Kota / Kabupaten</label>
-                  <input
-                    type="text"
-                    value={form.city_regency}
-                    onChange={(e) => updateField('city_regency', e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="Masukkan kota/kabupaten"
-                  />
+                  <select
+                    value={regencyId}
+                    onChange={async (e) => {
+                      const nextId = e.target.value
+                      setRegencyId(nextId)
+                      const nextText = regencies.find((r) => r.id === nextId)?.text ?? ''
+                      updateField('city_regency', nextText)
+                      updateField('district', '')
+                      updateField('postal_code', '')
+                      setDistrictId('')
+                      setDistricts([])
+                      setPostalCodes([])
+
+                      if (!nextId) return
+                      try {
+                        const res = await fetch(`/api/locations/districts?regency_id=${encodeURIComponent(nextId)}`)
+                        const json = (await res.json()) as { data?: LocationOption[] }
+                        setDistricts(json.data ?? [])
+                      } catch (_err) {
+                        setDistricts([])
+                      }
+                    }}
+                    disabled={!provinceId}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-slate-50"
+                    required
+                  >
+                    <option value="">{provinceId ? 'Pilih kota/kabupaten' : 'Pilih provinsi dulu'}</option>
+                    {regencies.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.text}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Kecamatan</label>
-                  <input
-                    type="text"
-                    value={form.district}
-                    onChange={(e) => updateField('district', e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="Masukkan kecamatan"
-                  />
+                  <select
+                    value={districtId}
+                    onChange={async (e) => {
+                      const nextId = e.target.value
+                      setDistrictId(nextId)
+                      const nextText = districts.find((d) => d.id === nextId)?.text ?? ''
+                      updateField('district', nextText)
+                      updateField('postal_code', '')
+                      setPostalCodes([])
+
+                      if (!regencyId || !nextId) return
+                      try {
+                        const res = await fetch(
+                          `/api/locations/postal-codes?regency_id=${encodeURIComponent(regencyId)}&district_id=${encodeURIComponent(nextId)}`
+                        )
+                        const json = (await res.json()) as { data?: LocationOption[] }
+                        const nextPostalCodes = json.data ?? []
+                        setPostalCodes(nextPostalCodes)
+                        if (nextPostalCodes.length === 0) {
+                          updateField('postal_code', '-')
+                        }
+                      } catch (_err) {
+                        setPostalCodes([])
+                        updateField('postal_code', '-')
+                      }
+                    }}
+                    disabled={!regencyId}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-slate-50"
+                    required
+                  >
+                    <option value="">{regencyId ? 'Pilih kecamatan' : 'Pilih kota dulu'}</option>
+                    {districts.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.text}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Kode Pos</label>
-                  <input
-                    type="text"
+                  <select
                     value={form.postal_code}
                     onChange={(e) => updateField('postal_code', e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="Masukkan kode pos"
-                  />
+                    disabled={!districtId}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-slate-50"
+                    required={Boolean(districtId) && postalCodes.length > 0}
+                  >
+                    <option value="">{districtId ? 'Pilih kode pos' : 'Pilih kecamatan dulu'}</option>
+                    {districtId && postalCodes.length === 0 ? <option value="-">-</option> : null}
+                    {postalCodes.map((k) => (
+                      <option key={k.id} value={k.text}>
+                        {k.text}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

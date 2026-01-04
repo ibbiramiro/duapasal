@@ -1,7 +1,57 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import type { Database } from '@/types/supabase'
+
+// Paths that should bypass maintenance check
+const BYPASS_PATHS = [
+  '/api',
+  '/admin',
+  '/maintenance',
+]
 
 export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl
+
+  // Skip maintenance check for API, admin, or maintenance page itself
+  if (BYPASS_PATHS.some(path => pathname.startsWith(path))) {
+    // Continue with normal auth flow
+  } else {
+    // Check maintenance mode
+    try {
+      const supabaseAdmin = createClient<Database>(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      )
+
+      const { data, error } = await supabaseAdmin
+        .from('maintenance')
+        .select('enabled, title, message, start_at, end_at')
+        .eq('enabled', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle() as any
+
+      if (!error && data?.enabled) {
+        // Check time range if specified
+        const now = new Date()
+        if (data.start_at && now < new Date(data.start_at)) {
+          // Not started yet, continue
+        } else if (data.end_at && now > new Date(data.end_at)) {
+          // Already ended, continue
+        } else {
+          // Maintenance is active, redirect to maintenance page
+          const url = request.nextUrl.clone()
+          url.pathname = '/maintenance'
+          return NextResponse.redirect(url)
+        }
+      }
+    } catch (err) {
+      console.error('[Middleware] Maintenance check error:', err)
+      // Continue normally on error
+    }
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   })

@@ -111,7 +111,7 @@ export type Database = {
             columns: ['church_id']
             referencedRelation: 'churches'
             referencedColumns: ['id']
-          },
+          }
         ]
       }
       profiles: {
@@ -132,6 +132,7 @@ export type Database = {
           email_reminder_enabled: boolean | null
           total_points: number | null
           current_streak: number | null
+          longest_streak: number | null
           created_at: Timestamp
           updated_at: Timestamp
         }
@@ -152,6 +153,7 @@ export type Database = {
           email_reminder_enabled?: boolean | null
           total_points?: number | null
           current_streak?: number | null
+          longest_streak?: number | null
           created_at?: Timestamp
           updated_at?: Timestamp
         }
@@ -172,6 +174,7 @@ export type Database = {
           email_reminder_enabled?: boolean | null
           total_points?: number | null
           current_streak?: number | null
+          longest_streak?: number | null
           created_at?: Timestamp
           updated_at?: Timestamp
         }
@@ -187,7 +190,7 @@ export type Database = {
             columns: ['pastor_id']
             referencedRelation: 'pastors'
             referencedColumns: ['id']
-          },
+          }
         ]
       }
       email_logs: {
@@ -295,6 +298,39 @@ export type Database = {
           completed_at?: Timestamp
           points_earned?: number
           created_at?: Timestamp
+        }
+        Relationships: []
+      }
+      maintenance: {
+        Row: {
+          id: string
+          enabled: boolean
+          title: string | null
+          message: string | null
+          start_at: string | null
+          end_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          enabled: boolean
+          title?: string | null
+          message?: string | null
+          start_at?: string | null
+          end_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          enabled?: boolean
+          title?: string | null
+          message?: string | null
+          start_at?: string | null
+          end_at?: string | null
+          created_at?: string
+          updated_at?: string
         }
         Relationships: []
       }
