@@ -235,10 +235,8 @@ function ReaderContent() {
       // Close the reader window
       window.close()
       
-      // If window doesn't close, redirect back to dashboard
-      setTimeout(() => {
-        router.push('/dashboard')
-      }, 1000)
+      // Always navigate to dashboard in case the window stays open (mobile/web)
+      router.replace('/dashboard')
 
     } catch (error) {
       console.error('[Reader] Complete error:', error)

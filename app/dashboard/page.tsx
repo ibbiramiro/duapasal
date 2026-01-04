@@ -340,7 +340,7 @@ export default function DashboardPage() {
                           }`}
                         >
                           <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-3">
+                            <div className="flex flex-wrap items-center space-x-3">
                               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                                 isCompleted 
                                   ? 'bg-green-100 text-green-800' 
@@ -366,9 +366,13 @@ export default function DashboardPage() {
                               ) : (
                                 <button
                                   onClick={() => openReader(item)}
-                                  className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+                                  className="inline-flex items-center justify-center gap-2 rounded-full bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/30 transition hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
+                                  aria-label={`Mulai membaca ${item.bible_books.name} ${item.start_chapter}`}
                                 >
-                                  Mulai Membaca
+                                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                  </svg>
+                                  <span className="sr-only sm:not-sr-only">Mulai</span>
                                 </button>
                               )}
                             </div>
