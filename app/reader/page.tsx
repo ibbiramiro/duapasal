@@ -90,6 +90,17 @@ function ReaderContent() {
         } catch (_e) {
           // ignore
         }
+
+        try {
+          if (window.opener && !window.opener.closed) {
+            window.opener.postMessage(
+              { type: 'duapasal:reading_completed', at: Date.now(), planItemId: planItemIdFromQuery },
+              window.location.origin
+            )
+          }
+        } catch (_e) {
+          // ignore
+        }
       } finally {
         setAutoSaving(false)
       }
@@ -206,6 +217,17 @@ function ReaderContent() {
         const bc = new BroadcastChannel('duapasal')
         bc.postMessage({ type: 'reading_completed', at: Date.now(), planItemId: planItemIdFromQuery })
         bc.close()
+      } catch (_e) {
+        // ignore
+      }
+
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage(
+            { type: 'duapasal:reading_completed', at: Date.now(), planItemId: planItemIdFromQuery },
+            window.location.origin
+          )
+        }
       } catch (_e) {
         // ignore
       }

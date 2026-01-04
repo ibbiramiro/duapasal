@@ -26,6 +26,18 @@ export default function DashboardPage() {
   const [readingData, setReadingData] = useState<TodayReadingResponse | null>(null)
   const [readingLoading, setReadingLoading] = useState(true)
 
+  function optimisticMarkCompleted(planItemId?: string | null) {
+    if (!planItemId) return
+    setReadingData((prev) => {
+      if (!prev) return prev
+      if (prev.completedItems.includes(planItemId)) return prev
+      return {
+        ...prev,
+        completedItems: [...prev.completedItems, planItemId],
+      }
+    })
+  }
+
   useEffect(() => {
     let cancelled = false
 
@@ -78,6 +90,12 @@ export default function DashboardPage() {
 
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'duapasal:last_reading_complete') {
+        try {
+          const payload = e.newValue ? JSON.parse(e.newValue) : null
+          optimisticMarkCompleted(payload?.planItemId)
+        } catch (_err) {
+          // ignore
+        }
         loadTodayReading()
       }
     }
@@ -89,6 +107,7 @@ export default function DashboardPage() {
       bc = new BroadcastChannel('duapasal')
       bc.onmessage = (event) => {
         if (event?.data?.type === 'reading_completed') {
+          optimisticMarkCompleted(event?.data?.planItemId)
           loadTodayReading()
         }
       }
@@ -96,8 +115,18 @@ export default function DashboardPage() {
       // Ignore if BroadcastChannel is not available
     }
 
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return
+      if (event?.data?.type === 'duapasal:reading_completed') {
+        optimisticMarkCompleted(event?.data?.planItemId)
+        loadTodayReading()
+      }
+    }
+    window.addEventListener('message', handleMessage)
+
     return () => {
       window.removeEventListener('storage', handleStorage)
+      window.removeEventListener('message', handleMessage)
       try {
         bc?.close()
       } catch (_e) {
