@@ -52,6 +52,103 @@ type RegionOption = {
   name: string
 }
 
+type ComboboxOption = {
+  value: string
+  label: string
+}
+
+function Combobox({
+  label,
+  value,
+  options,
+  placeholder,
+  emptyText,
+  disabled,
+  onChange,
+}: {
+  label: string
+  value: string
+  options: ComboboxOption[]
+  placeholder: string
+  emptyText: string
+  disabled?: boolean
+  onChange: (nextValue: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return options
+    return options.filter((o) => o.label.toLowerCase().includes(q))
+  }, [options, query])
+
+  useEffect(() => {
+    if (!open) setQuery('')
+  }, [open])
+
+  return (
+    <div className="relative grid gap-2">
+      <label className="text-sm font-medium">{label}</label>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between rounded border border-slate-200 bg-white px-3 py-2 text-left text-sm outline-none focus:border-indigo-400 disabled:bg-slate-50 disabled:text-slate-400"
+      >
+        <span className={value ? 'text-slate-900' : 'text-slate-400'}>
+          {value || placeholder}
+        </span>
+        <span className="ml-2 text-slate-500">▾</span>
+      </button>
+
+      {open ? (
+        <div className="absolute left-0 top-full z-20 mt-1 w-full overflow-hidden rounded border border-slate-200 bg-white shadow-lg">
+          <div className="p-2">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Cari..."
+              className="w-full rounded border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              autoFocus
+            />
+          </div>
+          <div className="max-h-56 overflow-auto p-1">
+            {filtered.length ? (
+              filtered.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => {
+                    onChange(opt.label)
+                    setOpen(false)
+                  }}
+                  className={`w-full rounded px-3 py-2 text-left text-sm hover:bg-slate-100 ${
+                    opt.label === value ? 'bg-slate-100' : ''
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))
+            ) : (
+              <div className="px-3 py-2 text-sm text-slate-500">{emptyText}</div>
+            )}
+          </div>
+          <div className="border-t border-slate-200 p-2">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="w-full rounded bg-slate-50 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+            >
+              Tutup
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export default function RegisterPage() {
   const [form, setForm] = useState<FormState>(initialState)
   const [status, setStatus] = useState<'idle' | 'loading' | 'sent' | 'error'>('idle')
@@ -62,9 +159,43 @@ export default function RegisterPage() {
   const [districts, setDistricts] = useState<RegionOption[]>([])
   const [villages, setVillages] = useState<RegionOption[]>([])
 
+  const [churches, setChurches] = useState<RegionOption[]>([])
+  const [pastors, setPastors] = useState<RegionOption[]>([])
+
   const redirectTo = useMemo(() => {
     if (typeof window === 'undefined') return ''
     return `${window.location.origin}/auth/callback`
+  }, [])
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadChurchesAndPastors() {
+      const [churchResult, pastorResult] = await Promise.all([
+        supabase.from('churches').select('id,name').order('name', { ascending: true }),
+        supabase.from('pastors').select('id,name').order('name', { ascending: true }),
+      ])
+
+      if (!mounted) return
+
+      if (churchResult.error) {
+        setMessage(churchResult.error.message)
+      } else {
+        setChurches((churchResult.data ?? []) as RegionOption[])
+      }
+
+      if (pastorResult.error) {
+        setMessage(pastorResult.error.message)
+      } else {
+        setPastors((pastorResult.data ?? []) as RegionOption[])
+      }
+    }
+
+    void loadChurchesAndPastors()
+
+    return () => {
+      mounted = false
+    }
   }, [])
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -198,6 +329,36 @@ export default function RegisterPage() {
     if (!cleaned) return ''
     return options.find((o) => o.name.toLowerCase() === cleaned)?.id ?? ''
   }
+
+  const provinceOptions = useMemo<ComboboxOption[]>(
+    () => provinces.map((p) => ({ value: p.id, label: p.name })),
+    [provinces],
+  )
+
+  const regencyOptions = useMemo<ComboboxOption[]>(
+    () => regencies.map((r) => ({ value: r.id, label: r.name })),
+    [regencies],
+  )
+
+  const districtOptions = useMemo<ComboboxOption[]>(
+    () => districts.map((d) => ({ value: d.id, label: d.name })),
+    [districts],
+  )
+
+  const villageOptions = useMemo<ComboboxOption[]>(
+    () => villages.map((v) => ({ value: v.id, label: v.name })),
+    [villages],
+  )
+
+  const churchOptions = useMemo<ComboboxOption[]>(
+    () => churches.map((c) => ({ value: c.id, label: c.name })),
+    [churches],
+  )
+
+  const pastorOptions = useMemo<ComboboxOption[]>(
+    () => pastors.map((p) => ({ value: p.id, label: p.name })),
+    [pastors],
+  )
 
   async function registerWithEmailOtp(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -341,143 +502,107 @@ export default function RegisterPage() {
 
           <div className="grid gap-2 md:grid-cols-2">
             <div className="grid gap-2">
-              <label className="text-sm font-medium">Cabang Gereja</label>
-              <input
+              <Combobox
+                label="Cabang Gereja"
                 value={form.church_branch}
-                onChange={(e) => updateField('church_branch', e.target.value)}
-                type="text"
-                placeholder="Gereja tempat Anda tergabung"
-                className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
+                options={churchOptions}
+                placeholder="Pilih cabang gereja"
+                emptyText="Tidak ada data gereja"
+                onChange={(label) => updateField('church_branch', label)}
               />
             </div>
-            <div className="grid gap-2">
-              <label className="text-sm font-medium">Pendeta Naungan</label>
-              <input
-                value={form.pastor_name}
-                onChange={(e) => updateField('pastor_name', e.target.value)}
-                type="text"
-                placeholder="Nama pendeta"
-                className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
-              />
-            </div>
+            <Combobox
+              label="Pendeta Naungan"
+              value={form.pastor_name}
+              options={pastorOptions}
+              placeholder="Pilih pendeta"
+              emptyText="Tidak ada data pendeta"
+              onChange={(label) => updateField('pastor_name', label)}
+            />
           </div>
 
           <div className="grid gap-2 md:grid-cols-2">
-            <div className="grid gap-2">
-              <label className="text-sm font-medium">Provinsi</label>
-              <input
-                value={form.province}
-                onChange={(e) => {
-                  const value = e.target.value
-                  const id = findIdByName(provinces, value)
-                  setForm((prev) => ({
-                    ...prev,
-                    province: value,
-                    province_id: id,
-                    city: '',
-                    regency_id: '',
-                    district: '',
-                    district_id: '',
-                    village: '',
-                    village_id: '',
-                  }))
-                }}
-                list="province-options"
-                type="text"
-                placeholder="Cari provinsi"
-                className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
-                autoComplete="off"
-              />
-              <datalist id="province-options">
-                {provinces.map((p) => (
-                  <option key={p.id} value={p.name} />
-                ))}
-              </datalist>
-            </div>
-            <div className="grid gap-2">
-              <label className="text-sm font-medium">Kota / Kabupaten</label>
-              <input
-                value={form.city}
-                onChange={(e) => {
-                  const value = e.target.value
-                  const id = findIdByName(regencies, value)
-                  setForm((prev) => ({
-                    ...prev,
-                    city: value,
-                    regency_id: id,
-                    district: '',
-                    district_id: '',
-                    village: '',
-                    village_id: '',
-                  }))
-                }}
-                list="regency-options"
-                type="text"
-                placeholder={form.province_id ? 'Cari kota/kabupaten' : 'Pilih provinsi dulu'}
-                className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
-                autoComplete="off"
-                disabled={!form.province_id}
-              />
-              <datalist id="regency-options">
-                {regencies.map((r) => (
-                  <option key={r.id} value={r.name} />
-                ))}
-              </datalist>
-            </div>
+            <Combobox
+              label="Provinsi"
+              value={form.province}
+              options={provinceOptions}
+              placeholder="Pilih provinsi"
+              emptyText="Tidak ada data provinsi"
+              onChange={(label) => {
+                const id = findIdByName(provinces, label)
+                setForm((prev) => ({
+                  ...prev,
+                  province: label,
+                  province_id: id,
+                  city: '',
+                  regency_id: '',
+                  district: '',
+                  district_id: '',
+                  village: '',
+                  village_id: '',
+                }))
+              }}
+            />
+            <Combobox
+              label="Kota / Kabupaten"
+              value={form.city}
+              options={regencyOptions}
+              placeholder={form.province_id ? 'Pilih kota/kabupaten' : 'Pilih provinsi dulu'}
+              emptyText="Tidak ada data kota/kabupaten"
+              disabled={!form.province_id}
+              onChange={(label) => {
+                const id = findIdByName(regencies, label)
+                setForm((prev) => ({
+                  ...prev,
+                  city: label,
+                  regency_id: id,
+                  district: '',
+                  district_id: '',
+                  village: '',
+                  village_id: '',
+                }))
+              }}
+            />
           </div>
 
           <div className="grid gap-2 md:grid-cols-2">
-            <div className="grid gap-2">
-              <label className="text-sm font-medium">Kecamatan</label>
-              <input
-                value={form.district}
-                onChange={(e) => {
-                  const value = e.target.value
-                  const id = findIdByName(districts, value)
-                  setForm((prev) => ({
-                    ...prev,
-                    district: value,
-                    district_id: id,
-                    village: '',
-                    village_id: '',
-                  }))
-                }}
-                list="district-options"
-                type="text"
-                placeholder={form.regency_id ? 'Cari kecamatan' : 'Pilih kota/kabupaten dulu'}
-                className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
-                autoComplete="off"
-                disabled={!form.regency_id}
-              />
-              <datalist id="district-options">
-                {districts.map((d) => (
-                  <option key={d.id} value={d.name} />
-                ))}
-              </datalist>
-            </div>
-            <div className="grid gap-2">
-              <label className="text-sm font-medium">Kelurahan</label>
-              <input
-                value={form.village}
-                onChange={(e) => {
-                  const value = e.target.value
-                  const id = findIdByName(villages, value)
-                  updateField('village', value)
-                  updateField('village_id', id)
-                }}
-                list="village-options"
-                type="text"
-                placeholder={form.district_id ? 'Cari kelurahan' : 'Pilih kecamatan dulu'}
-                className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
-                autoComplete="off"
-                disabled={!form.district_id}
-              />
-              <datalist id="village-options">
-                {villages.map((v) => (
-                  <option key={v.id} value={v.name} />
-                ))}
-              </datalist>
-            </div>
+            <Combobox
+              label="Kecamatan"
+              value={form.district}
+              options={districtOptions}
+              placeholder={form.regency_id ? 'Pilih kecamatan' : 'Pilih kota/kabupaten dulu'}
+              emptyText="Tidak ada data kecamatan"
+              disabled={!form.regency_id}
+              onChange={(label) => {
+                const id = findIdByName(districts, label)
+                setForm((prev) => ({
+                  ...prev,
+                  district: label,
+                  district_id: id,
+                  village: '',
+                  village_id: '',
+                }))
+              }}
+            />
+            <Combobox
+              label="Kelurahan"
+              value={form.village}
+              options={villageOptions}
+              placeholder={
+                !form.district_id
+                  ? 'Pilih kecamatan dulu'
+                  : villageOptions.length
+                    ? 'Pilih kelurahan'
+                    : 'Kelurahan tidak tersedia'
+              }
+              emptyText="Tidak ada data kelurahan"
+              disabled={!form.district_id || villageOptions.length === 0}
+              onChange={(label) => {
+                const id = findIdByName(villages, label)
+                updateField('village', label)
+                updateField('village_id', id)
+              }}
+            />
           </div>
 
           <div className="grid gap-2">
