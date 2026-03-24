@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 import { ensureProfile } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 
-export default function AuthCallbackPage() {
+function AuthCallbackInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [error, setError] = useState<string | null>(null)
@@ -84,5 +84,19 @@ export default function AuthCallbackPage() {
       <h1 className="text-lg font-semibold">Memproses login...</h1>
       {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
     </div>
+  )
+}
+
+export default function AuthCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto w-full max-w-md rounded border border-slate-200 bg-white p-4">
+          <h1 className="text-lg font-semibold">Memproses login...</h1>
+        </div>
+      }
+    >
+      <AuthCallbackInner />
+    </Suspense>
   )
 }
