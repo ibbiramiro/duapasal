@@ -1,7 +1,7 @@
 'use client'
 
 import type { FormEvent } from 'react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { supabase } from '@/lib/supabase'
 
@@ -12,9 +12,13 @@ type FormState = {
   phone: string
   address_line: string
   province: string
+  province_id: string
   city: string
+  regency_id: string
   district: string
-  postal_code: string
+  district_id: string
+  village: string
+  village_id: string
   church_branch: string
   pastor_name: string
   reminder_opt_in: boolean
@@ -29,9 +33,13 @@ const initialState: FormState = {
   phone: '',
   address_line: '',
   province: '',
+  province_id: '',
   city: '',
+  regency_id: '',
   district: '',
-  postal_code: '',
+  district_id: '',
+  village: '',
+  village_id: '',
   church_branch: '',
   pastor_name: '',
   reminder_opt_in: true,
@@ -39,10 +47,20 @@ const initialState: FormState = {
   confirmPassword: '',
 }
 
+type RegionOption = {
+  id: string
+  name: string
+}
+
 export default function RegisterPage() {
   const [form, setForm] = useState<FormState>(initialState)
   const [status, setStatus] = useState<'idle' | 'loading' | 'sent' | 'error'>('idle')
   const [message, setMessage] = useState<string | null>(null)
+
+  const [provinces, setProvinces] = useState<RegionOption[]>([])
+  const [regencies, setRegencies] = useState<RegionOption[]>([])
+  const [districts, setDistricts] = useState<RegionOption[]>([])
+  const [villages, setVillages] = useState<RegionOption[]>([])
 
   const redirectTo = useMemo(() => {
     if (typeof window === 'undefined') return ''
@@ -51,6 +69,134 @@ export default function RegisterPage() {
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadProvinces() {
+      const { data, error } = await supabase
+        .from('provinces')
+        .select('id,name')
+        .order('name', { ascending: true })
+
+      if (!mounted) return
+
+      if (error) {
+        setMessage(error.message)
+        return
+      }
+
+      setProvinces((data ?? []) as RegionOption[])
+    }
+
+    void loadProvinces()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadRegencies() {
+      if (!form.province_id) {
+        setRegencies([])
+        return
+      }
+
+      const { data, error } = await supabase
+        .from('regencies')
+        .select('id,name')
+        .eq('province_id', form.province_id)
+        .order('name', { ascending: true })
+
+      if (!mounted) return
+
+      if (error) {
+        setMessage(error.message)
+        return
+      }
+
+      setRegencies((data ?? []) as RegionOption[])
+    }
+
+    void loadRegencies()
+
+    return () => {
+      mounted = false
+    }
+  }, [form.province_id])
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadDistricts() {
+      if (!form.regency_id) {
+        setDistricts([])
+        return
+      }
+
+      const { data, error } = await supabase
+        .from('districts')
+        .select('id,name')
+        .eq('regency_id', form.regency_id)
+        .order('name', { ascending: true })
+
+      if (!mounted) return
+
+      if (error) {
+        setMessage(error.message)
+        return
+      }
+
+      setDistricts((data ?? []) as RegionOption[])
+    }
+
+    void loadDistricts()
+
+    return () => {
+      mounted = false
+    }
+  }, [form.regency_id])
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadVillages() {
+      if (!form.district_id) {
+        setVillages([])
+        return
+      }
+
+      const { data, error } = await supabase
+        .from('villages')
+        .select('id,name')
+        .eq('district_id', form.district_id)
+        .order('name', { ascending: true })
+
+      if (!mounted) return
+
+      if (error) {
+        setMessage(error.message)
+        return
+      }
+
+      setVillages((data ?? []) as RegionOption[])
+    }
+
+    void loadVillages()
+
+    return () => {
+      mounted = false
+    }
+  }, [form.district_id])
+
+  function findIdByName(options: RegionOption[], name: string) {
+    const cleaned = name.trim().toLowerCase()
+    if (!cleaned) return ''
+    return options.find((o) => o.name.toLowerCase() === cleaned)?.id ?? ''
   }
 
   async function registerWithEmailOtp(e: FormEvent<HTMLFormElement>) {
@@ -65,9 +211,13 @@ export default function RegisterPage() {
       phone,
       address_line,
       province,
+      province_id,
       city,
+      regency_id,
       district,
-      postal_code,
+      district_id,
+      village,
+      village_id,
       church_branch,
       pastor_name,
       reminder_opt_in,
@@ -98,9 +248,13 @@ export default function RegisterPage() {
           phone,
           address_line,
           province,
+          province_id,
           city,
+          regency_id,
           district,
-          postal_code,
+          district_id,
+          village,
+          village_id,
           church_branch,
           pastor_name,
           reminder_opt_in,
@@ -213,21 +367,62 @@ export default function RegisterPage() {
               <label className="text-sm font-medium">Provinsi</label>
               <input
                 value={form.province}
-                onChange={(e) => updateField('province', e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value
+                  const id = findIdByName(provinces, value)
+                  setForm((prev) => ({
+                    ...prev,
+                    province: value,
+                    province_id: id,
+                    city: '',
+                    regency_id: '',
+                    district: '',
+                    district_id: '',
+                    village: '',
+                    village_id: '',
+                  }))
+                }}
+                list="province-options"
                 type="text"
-                placeholder="Contoh: DKI Jakarta"
+                placeholder="Cari provinsi"
                 className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
+                autoComplete="off"
               />
+              <datalist id="province-options">
+                {provinces.map((p) => (
+                  <option key={p.id} value={p.name} />
+                ))}
+              </datalist>
             </div>
             <div className="grid gap-2">
               <label className="text-sm font-medium">Kota / Kabupaten</label>
               <input
                 value={form.city}
-                onChange={(e) => updateField('city', e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value
+                  const id = findIdByName(regencies, value)
+                  setForm((prev) => ({
+                    ...prev,
+                    city: value,
+                    regency_id: id,
+                    district: '',
+                    district_id: '',
+                    village: '',
+                    village_id: '',
+                  }))
+                }}
+                list="regency-options"
                 type="text"
-                placeholder="Contoh: Jakarta Selatan"
+                placeholder={form.province_id ? 'Cari kota/kabupaten' : 'Pilih provinsi dulu'}
                 className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
+                autoComplete="off"
+                disabled={!form.province_id}
               />
+              <datalist id="regency-options">
+                {regencies.map((r) => (
+                  <option key={r.id} value={r.name} />
+                ))}
+              </datalist>
             </div>
           </div>
 
@@ -236,21 +431,52 @@ export default function RegisterPage() {
               <label className="text-sm font-medium">Kecamatan</label>
               <input
                 value={form.district}
-                onChange={(e) => updateField('district', e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value
+                  const id = findIdByName(districts, value)
+                  setForm((prev) => ({
+                    ...prev,
+                    district: value,
+                    district_id: id,
+                    village: '',
+                    village_id: '',
+                  }))
+                }}
+                list="district-options"
                 type="text"
-                placeholder="Contoh: Kebayoran Baru"
+                placeholder={form.regency_id ? 'Cari kecamatan' : 'Pilih kota/kabupaten dulu'}
                 className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
+                autoComplete="off"
+                disabled={!form.regency_id}
               />
+              <datalist id="district-options">
+                {districts.map((d) => (
+                  <option key={d.id} value={d.name} />
+                ))}
+              </datalist>
             </div>
             <div className="grid gap-2">
-              <label className="text-sm font-medium">Kode Pos</label>
+              <label className="text-sm font-medium">Kelurahan</label>
               <input
-                value={form.postal_code}
-                onChange={(e) => updateField('postal_code', e.target.value)}
+                value={form.village}
+                onChange={(e) => {
+                  const value = e.target.value
+                  const id = findIdByName(villages, value)
+                  updateField('village', value)
+                  updateField('village_id', id)
+                }}
+                list="village-options"
                 type="text"
-                placeholder="Contoh: 12190"
+                placeholder={form.district_id ? 'Cari kelurahan' : 'Pilih kecamatan dulu'}
                 className="w-full rounded border border-slate-200 px-3 py-2 outline-none focus:border-indigo-400"
+                autoComplete="off"
+                disabled={!form.district_id}
               />
+              <datalist id="village-options">
+                {villages.map((v) => (
+                  <option key={v.id} value={v.name} />
+                ))}
+              </datalist>
             </div>
           </div>
 
