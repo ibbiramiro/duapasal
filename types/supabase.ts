@@ -114,100 +114,6 @@ export type Database = {
           }
         ]
       }
-
-      wilayah_provinces: {
-        Row: {
-          id: string
-          name: string
-        }
-        Insert: {
-          id: string
-          name: string
-        }
-        Update: {
-          id?: string
-          name?: string
-        }
-        Relationships: []
-      }
-
-      wilayah_regencies: {
-        Row: {
-          id: string
-          province_id: string
-          name: string
-        }
-        Insert: {
-          id: string
-          province_id: string
-          name: string
-        }
-        Update: {
-          id?: string
-          province_id?: string
-          name?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'wilayah_regencies_province_id_fkey'
-            columns: ['province_id']
-            referencedRelation: 'wilayah_provinces'
-            referencedColumns: ['id']
-          }
-        ]
-      }
-
-      wilayah_districts: {
-        Row: {
-          id: string
-          regency_id: string
-          name: string
-        }
-        Insert: {
-          id: string
-          regency_id: string
-          name: string
-        }
-        Update: {
-          id?: string
-          regency_id?: string
-          name?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'wilayah_districts_regency_id_fkey'
-            columns: ['regency_id']
-            referencedRelation: 'wilayah_regencies'
-            referencedColumns: ['id']
-          }
-        ]
-      }
-
-      wilayah_villages: {
-        Row: {
-          id: string
-          district_id: string
-          name: string
-        }
-        Insert: {
-          id: string
-          district_id: string
-          name: string
-        }
-        Update: {
-          id?: string
-          district_id?: string
-          name?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'wilayah_villages_district_id_fkey'
-            columns: ['district_id']
-            referencedRelation: 'wilayah_districts'
-            referencedColumns: ['id']
-          }
-        ]
-      }
       profiles: {
         Row: {
           id: string
@@ -221,7 +127,6 @@ export type Database = {
           province: string | null
           city_regency: string | null
           district: string | null
-          village: string | null
           postal_code: string | null
           full_address: string | null
           email_reminder_enabled: boolean | null
@@ -243,7 +148,6 @@ export type Database = {
           province?: string | null
           city_regency?: string | null
           district?: string | null
-          village?: string | null
           postal_code?: string | null
           full_address?: string | null
           email_reminder_enabled?: boolean | null
@@ -265,7 +169,6 @@ export type Database = {
           province?: string | null
           city_regency?: string | null
           district?: string | null
-          village?: string | null
           postal_code?: string | null
           full_address?: string | null
           email_reminder_enabled?: boolean | null

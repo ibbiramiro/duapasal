@@ -15,9 +15,20 @@ export async function GET(request: Request) {
   }
 
   try {
-    void regencyId
-    void districtId
-    return NextResponse.json({ data: [] })
+    const url = `https://alamat.thecloudalert.com/api/kodepos/get/?d_kabkota_id=${encodeURIComponent(regencyId)}&d_kecamatan_id=${encodeURIComponent(districtId)}`
+    const res = await fetch(url, { cache: 'no-store' })
+
+    if (!res.ok) {
+      return NextResponse.json({ error: 'Failed to fetch postal codes' }, { status: 502 })
+    }
+
+    const json = (await res.json()) as {
+      status?: number
+      message?: string
+      result?: Array<{ id: string; text: string }>
+    }
+
+    return NextResponse.json({ data: json.result ?? [] })
   } catch (err) {
     console.error('[Locations] postal-codes error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
