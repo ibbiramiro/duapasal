@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   try {
     const supabaseAdmin = requireSupabaseAdmin()
     const { data, error } = await supabaseAdmin
-      .from('wilayah_villages')
+      .from('villages')
       .select('id,name')
       .eq('district_id', districtId)
       .order('name', { ascending: true })

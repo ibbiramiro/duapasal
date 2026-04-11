@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 
+import { requireSupabaseAdmin } from '@/lib/supabase-admin'
+
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
@@ -11,20 +13,18 @@ export async function GET(request: Request) {
   }
 
   try {
-    const url = `https://alamat.thecloudalert.com/api/kecamatan/get/?d_kabkota_id=${encodeURIComponent(regencyId)}`
-    const res = await fetch(url, { cache: 'no-store' })
+    const supabaseAdmin = requireSupabaseAdmin()
+    const { data, error } = await supabaseAdmin
+      .from('districts')
+      .select('id,name')
+      .eq('regency_id', regencyId)
+      .order('name', { ascending: true })
 
-    if (!res.ok) {
-      return NextResponse.json({ error: 'Failed to fetch districts' }, { status: 502 })
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const json = (await res.json()) as {
-      status?: number
-      message?: string
-      result?: Array<{ id: string; text: string }>
-    }
-
-    return NextResponse.json({ data: json.result ?? [] })
+    return NextResponse.json({ data: (data ?? []).map((d) => ({ id: d.id, text: d.name })) })
   } catch (err) {
     console.error('[Locations] districts error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

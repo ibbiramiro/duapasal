@@ -334,6 +334,76 @@ export type Database = {
         }
         Relationships: []
       }
+
+      provinces: {
+        Row: {
+          id: string
+          name: string
+        }
+        Insert: {
+          id: string
+          name: string
+        }
+        Update: {
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      regencies: {
+        Row: {
+          id: string
+          province_id: string
+          name: string
+        }
+        Insert: {
+          id: string
+          province_id: string
+          name: string
+        }
+        Update: {
+          id?: string
+          province_id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      districts: {
+        Row: {
+          id: string
+          regency_id: string
+          name: string
+        }
+        Insert: {
+          id: string
+          regency_id: string
+          name: string
+        }
+        Update: {
+          id?: string
+          regency_id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      villages: {
+        Row: {
+          id: string
+          district_id: string
+          name: string
+        }
+        Insert: {
+          id: string
+          district_id: string
+          name: string
+        }
+        Update: {
+          id?: string
+          district_id?: string
+          name?: string
+        }
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: Record<string, never>
