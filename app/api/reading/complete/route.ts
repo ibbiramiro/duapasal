@@ -69,7 +69,8 @@ export async function POST(request: Request) {
     }
 
     const normalizeWordCount = (text: string) => {
-      const tokens = text.trim().split(/\s+/).filter(Boolean)
+      const normalized = text.replace(/\u00A0/g, ' ')
+      const tokens = normalized.trim().split(/\s+/).filter(Boolean)
       return tokens.length
     }
 
@@ -113,7 +114,7 @@ export async function POST(request: Request) {
     const alreadyCompleted = Boolean(existingLog)
 
     if (!alreadyCompleted) {
-      const c = typeof comment === 'string' ? comment.trim() : ''
+      const c = typeof comment === 'string' ? comment.replace(/\u00A0/g, ' ').trim() : ''
       if (!c) {
         return NextResponse.json({ error: 'Komentar wajib diisi (minimal 10 kata).' }, { status: 400 })
       }
@@ -124,7 +125,7 @@ export async function POST(request: Request) {
 
     let readingLog = existingLog
     if (!readingLog) {
-      const c = typeof comment === 'string' ? comment.trim() : ''
+      const c = typeof comment === 'string' ? comment.replace(/\u00A0/g, ' ').trim() : ''
       const { data: inserted, error: logError } = await supabaseAdmin
         .from('reading_logs')
         .insert({
@@ -144,7 +145,7 @@ export async function POST(request: Request) {
       readingLog = inserted
     } else {
       const existingComment = (readingLog as any)?.comment
-      const c = typeof comment === 'string' ? comment.trim() : ''
+      const c = typeof comment === 'string' ? comment.replace(/\u00A0/g, ' ').trim() : ''
       if (!existingComment && c) {
         await supabaseAdmin
           .from('reading_logs')
