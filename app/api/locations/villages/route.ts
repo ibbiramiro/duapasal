@@ -6,18 +6,18 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
-  const regencyId = searchParams.get('regency_id')
+  const districtId = searchParams.get('district_id')
 
-  if (!regencyId) {
-    return NextResponse.json({ error: 'regency_id is required' }, { status: 400 })
+  if (!districtId) {
+    return NextResponse.json({ error: 'district_id is required' }, { status: 400 })
   }
 
   try {
     const supabaseAdmin = requireSupabaseAdmin()
     const { data, error } = await supabaseAdmin
-      .from('wilayah_districts')
+      .from('wilayah_villages')
       .select('id,name')
-      .eq('regency_id', regencyId)
+      .eq('district_id', districtId)
       .order('name', { ascending: true })
 
     if (error) {
@@ -25,10 +25,10 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-      data: (data ?? []).map((d) => ({ id: d.id, text: d.name })),
+      data: (data ?? []).map((v) => ({ id: v.id, text: v.name })),
     })
   } catch (err) {
-    console.error('[Locations] districts error:', err)
+    console.error('[Locations] villages error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

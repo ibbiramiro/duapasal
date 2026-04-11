@@ -14,6 +14,7 @@ type MeResponse = {
   } | null
   profile?: {
     role?: string | null
+    phone?: string | null
   } | null
   error?: string
 }
@@ -58,6 +59,12 @@ export default function DashboardPage() {
             headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
           })
           const me = (await res.json()) as MeResponse
+
+          const phone = (me.profile?.phone ?? '').trim()
+          if (!phone) {
+            router.replace('/profile')
+            return
+          }
           setRole(me.profile?.role ?? 'USER')
         } catch (_error) {
           setRole('USER')

@@ -37,6 +37,7 @@ export async function ensureProfile(user: User) {
     | 'province'
     | 'city_regency'
     | 'district'
+    | 'village'
     | 'postal_code'
     | 'full_address'
     | 'church_id'
@@ -62,6 +63,7 @@ export async function ensureProfile(user: User) {
       undefined,
   )
   assignField('district', metadata.district as ProfileInsert['district'] | undefined)
+  assignField('village', metadata.village as ProfileInsert['village'] | undefined)
   assignField('postal_code', metadata.postal_code as ProfileInsert['postal_code'] | undefined)
   assignField(
     'full_address',

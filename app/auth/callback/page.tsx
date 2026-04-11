@@ -6,6 +6,12 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { ensureProfile } from '@/lib/auth'
 import { useSupabase } from '@/components/supabase-provider'
 
+type MeResponse = {
+  profile?: {
+    phone?: string | null
+  } | null
+}
+
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
 
@@ -38,12 +44,27 @@ function CallbackContent() {
           console.log('[Auth Callback] User authenticated, syncing profile...')
           // Sync user profile and redirect
           await ensureProfile(user)
+
+          const accessToken = data.session?.access_token
+          let nextPath = '/profile'
+          try {
+            const meRes = await fetch('/api/me', {
+              headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+            })
+            if (meRes.ok) {
+              const me = (await meRes.json()) as MeResponse
+              const phone = (me.profile?.phone ?? '').trim()
+              nextPath = phone ? '/dashboard' : '/profile'
+            }
+          } catch (_err) {
+            nextPath = '/profile'
+          }
           
           if (!cancelled) {
             setStatus('success')
             console.log('[Auth Callback] Profile synced, redirecting to dashboard...')
             setTimeout(() => {
-              router.replace('/dashboard')
+              router.replace(nextPath)
             }, 1000)
           }
           return

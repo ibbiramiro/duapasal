@@ -32,6 +32,7 @@ type ProfileRow = {
   province: string | null
   city_regency: string | null
   district: string | null
+  village: string | null
   postal_code: string | null
   full_address: string | null
   email_reminder_enabled: boolean | null
@@ -104,11 +105,13 @@ export default function ProfilePage() {
   const [provinces, setProvinces] = useState<LocationOption[]>([])
   const [regencies, setRegencies] = useState<LocationOption[]>([])
   const [districts, setDistricts] = useState<LocationOption[]>([])
-  const [postalCodes, setPostalCodes] = useState<LocationOption[]>([])
+  const [villages, setVillages] = useState<LocationOption[]>([])
+  const [, setPostalCodes] = useState<LocationOption[]>([])
 
   const [provinceId, setProvinceId] = useState<string>('')
   const [regencyId, setRegencyId] = useState<string>('')
   const [districtId, setDistrictId] = useState<string>('')
+  const [villageId, setVillageId] = useState<string>('')
 
   const initialDob = useMemo(() => splitDob(me?.profile?.dob ?? null), [me?.profile?.dob])
 
@@ -123,6 +126,7 @@ export default function ProfilePage() {
     province: '',
     city_regency: '',
     district: '',
+    village: '',
     postal_code: '',
     full_address: '',
     email_reminder_enabled: true,
@@ -143,6 +147,7 @@ export default function ProfilePage() {
       province: me.profile?.province ?? '',
       city_regency: me.profile?.city_regency ?? '',
       district: me.profile?.district ?? '',
+      village: me.profile?.village ?? '',
       postal_code: me.profile?.postal_code ?? '',
       full_address: me.profile?.full_address ?? '',
       email_reminder_enabled: me.profile?.email_reminder_enabled ?? true,
@@ -273,7 +278,7 @@ export default function ProfilePage() {
       const provinceText = (profile.province ?? '').trim()
       const regencyText = (profile.city_regency ?? '').trim()
       const districtText = (profile.district ?? '').trim()
-      const postalCodeText = (profile.postal_code ?? '').trim()
+      const villageText = (profile.village ?? '').trim()
 
       if (!provinceText) return
 
@@ -303,22 +308,23 @@ export default function ProfilePage() {
         if (!district) return
         setDistrictId(district.id)
 
-        const pcRes = await fetch(
-          `/api/locations/postal-codes?regency_id=${encodeURIComponent(regency.id)}&district_id=${encodeURIComponent(district.id)}`
-        )
-        const pcJson = (await pcRes.json()) as { data?: LocationOption[] }
+        const villRes = await fetch(`/api/locations/villages?district_id=${encodeURIComponent(district.id)}`)
+        const villJson = (await villRes.json()) as { data?: LocationOption[] }
         if (cancelled) return
-        const pcData = pcJson.data ?? []
-        setPostalCodes(pcData)
+        const villData = villJson.data ?? []
+        setVillages(villData)
 
-        if (postalCodeText && pcData.some((p) => p.text === postalCodeText)) {
-          updateField('postal_code', postalCodeText)
+        const village = villData.find((v) => v.text === villageText)
+        if (village) {
+          setVillageId(village.id)
         }
+
+        updateField('postal_code', '-')
       } catch (_e) {
         if (cancelled) return
         setRegencies([])
         setDistricts([])
-        setPostalCodes([])
+        setVillages([])
       }
     }
 
@@ -362,6 +368,7 @@ export default function ProfilePage() {
         province: form.province.trim() || null,
         city_regency: form.city_regency.trim() || null,
         district: form.district.trim() || null,
+        village: form.village.trim() || null,
         postal_code: form.postal_code.trim() || null,
         full_address: form.full_address.trim() || null,
         email_reminder_enabled: form.email_reminder_enabled,
@@ -653,11 +660,14 @@ export default function ProfilePage() {
                       updateField('province', nextText)
                       updateField('city_regency', '')
                       updateField('district', '')
+                      updateField('village', '')
                       updateField('postal_code', '')
                       setRegencyId('')
                       setDistrictId('')
+                      setVillageId('')
                       setRegencies([])
                       setDistricts([])
+                      setVillages([])
                       setPostalCodes([])
 
                       if (!nextId) return
@@ -690,9 +700,12 @@ export default function ProfilePage() {
                       const nextText = regencies.find((r) => r.id === nextId)?.text ?? ''
                       updateField('city_regency', nextText)
                       updateField('district', '')
+                      updateField('village', '')
                       updateField('postal_code', '')
                       setDistrictId('')
                       setDistricts([])
+                      setVillageId('')
+                      setVillages([])
                       setPostalCodes([])
 
                       if (!nextId) return
@@ -728,22 +741,20 @@ export default function ProfilePage() {
                       setDistrictId(nextId)
                       const nextText = districts.find((d) => d.id === nextId)?.text ?? ''
                       updateField('district', nextText)
+                      updateField('village', '')
                       updateField('postal_code', '')
+                      setVillageId('')
+                      setVillages([])
                       setPostalCodes([])
 
-                      if (!regencyId || !nextId) return
+                      if (!nextId) return
                       try {
-                        const res = await fetch(
-                          `/api/locations/postal-codes?regency_id=${encodeURIComponent(regencyId)}&district_id=${encodeURIComponent(nextId)}`
-                        )
+                        const res = await fetch(`/api/locations/villages?district_id=${encodeURIComponent(nextId)}`)
                         const json = (await res.json()) as { data?: LocationOption[] }
-                        const nextPostalCodes = json.data ?? []
-                        setPostalCodes(nextPostalCodes)
-                        if (nextPostalCodes.length === 0) {
-                          updateField('postal_code', '-')
-                        }
+                        setVillages(json.data ?? [])
                       } catch (_err) {
-                        setPostalCodes([])
+                        setVillages([])
+                      } finally {
                         updateField('postal_code', '-')
                       }
                     }}
@@ -760,19 +771,23 @@ export default function ProfilePage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Kode Pos</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Kelurahan</label>
                   <select
-                    value={form.postal_code}
-                    onChange={(e) => updateField('postal_code', e.target.value)}
+                    value={villageId}
+                    onChange={(e) => {
+                      const nextId = e.target.value
+                      setVillageId(nextId)
+                      const nextText = villages.find((v) => v.id === nextId)?.text ?? ''
+                      updateField('village', nextText)
+                    }}
                     disabled={!districtId}
                     className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-slate-50"
-                    required={Boolean(districtId) && postalCodes.length > 0}
+                    required
                   >
-                    <option value="">{districtId ? 'Pilih kode pos' : 'Pilih kecamatan dulu'}</option>
-                    {districtId && postalCodes.length === 0 ? <option value="-">-</option> : null}
-                    {postalCodes.map((k) => (
-                      <option key={k.id} value={k.text}>
-                        {k.text}
+                    <option value="">{districtId ? 'Pilih kelurahan' : 'Pilih kecamatan dulu'}</option>
+                    {villages.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.text}
                       </option>
                     ))}
                   </select>

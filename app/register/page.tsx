@@ -18,6 +18,7 @@ type FormState = {
   province: string
   city: string
   district: string
+  village: string
   postal_code: string
   church_id: string
   pastor_id: string
@@ -35,6 +36,7 @@ const initialState: FormState = {
   province: '',
   city: '',
   district: '',
+  village: '',
   postal_code: '',
   church_id: '',
   pastor_id: '',
@@ -88,11 +90,13 @@ export default function RegisterPage() {
   const [provinces, setProvinces] = useState<LocationOption[]>([])
   const [regencies, setRegencies] = useState<LocationOption[]>([])
   const [districts, setDistricts] = useState<LocationOption[]>([])
-  const [postalCodes, setPostalCodes] = useState<LocationOption[]>([])
+  const [villages, setVillages] = useState<LocationOption[]>([])
+  const [, setPostalCodes] = useState<LocationOption[]>([])
 
   const [provinceId, setProvinceId] = useState<string>('')
   const [regencyId, setRegencyId] = useState<string>('')
   const [districtId, setDistrictId] = useState<string>('')
+  const [villageId, setVillageId] = useState<string>('')
 
   const redirectTo = useMemo(() => {
     if (typeof window === 'undefined') return ''
@@ -234,6 +238,7 @@ export default function RegisterPage() {
       province,
       city,
       district,
+      village,
       postal_code,
       church_id,
       pastor_id,
@@ -298,6 +303,7 @@ export default function RegisterPage() {
           province,
           city_regency: city,
           district,
+          village,
           postal_code,
           church_id: church_id || null,
           pastor_id: pastor_id || null,
@@ -326,8 +332,10 @@ export default function RegisterPage() {
     setProvinceId('')
     setRegencyId('')
     setDistrictId('')
+    setVillageId('')
     setRegencies([])
     setDistricts([])
+    setVillages([])
     setPostalCodes([])
 
     setTimeout(() => {
@@ -497,11 +505,14 @@ export default function RegisterPage() {
                   updateField('province', nextText)
                   updateField('city', '')
                   updateField('district', '')
+                  updateField('village', '')
                   updateField('postal_code', '')
                   setRegencyId('')
                   setDistrictId('')
+                  setVillageId('')
                   setRegencies([])
                   setDistricts([])
+                  setVillages([])
                   setPostalCodes([])
 
                   if (!nextId) return
@@ -534,9 +545,12 @@ export default function RegisterPage() {
                   const nextText = regencies.find((r) => r.id === nextId)?.text ?? ''
                   updateField('city', nextText)
                   updateField('district', '')
+                  updateField('village', '')
                   updateField('postal_code', '')
                   setDistrictId('')
+                  setVillageId('')
                   setDistricts([])
+                  setVillages([])
                   setPostalCodes([])
 
                   if (!nextId) return
@@ -572,21 +586,20 @@ export default function RegisterPage() {
                   setDistrictId(nextId)
                   const nextText = districts.find((d) => d.id === nextId)?.text ?? ''
                   updateField('district', nextText)
+                  updateField('village', '')
                   updateField('postal_code', '')
+                  setVillageId('')
+                  setVillages([])
                   setPostalCodes([])
 
-                  if (!regencyId || !nextId) return
+                  if (!nextId) return
                   try {
-                    const res = await fetch(
-                      `/api/locations/postal-codes?regency_id=${encodeURIComponent(regencyId)}&district_id=${encodeURIComponent(nextId)}`
-                    )
+                    const res = await fetch(`/api/locations/villages?district_id=${encodeURIComponent(nextId)}`)
                     const json = (await res.json()) as { data?: LocationOption[] }
-                    const nextPostalCodes = json.data ?? []
-                    setPostalCodes(nextPostalCodes)
-                    if (nextPostalCodes.length === 0) {
-                      updateField('postal_code', '-')
-                    }
+                    setVillages(json.data ?? [])
                   } catch (_err) {
+                    setVillages([])
+                  } finally {
                     setPostalCodes([])
                     updateField('postal_code', '-')
                   }
@@ -604,21 +617,23 @@ export default function RegisterPage() {
               </select>
             </div>
             <div className="grid gap-2">
-              <label className="text-sm font-medium">Kode Pos</label>
+              <label className="text-sm font-medium">Kelurahan</label>
               <select
-                value={form.postal_code}
-                onChange={(e) => updateField('postal_code', e.target.value)}
-                required={Boolean(districtId) && postalCodes.length > 0}
+                value={villageId}
+                onChange={(e) => {
+                  const nextId = e.target.value
+                  setVillageId(nextId)
+                  const nextText = villages.find((v) => v.id === nextId)?.text ?? ''
+                  updateField('village', nextText)
+                }}
+                required
                 disabled={!districtId}
                 className="w-full rounded border border-slate-200 bg-white px-3 py-2 outline-none focus:border-indigo-400 disabled:bg-slate-50"
               >
-                <option value="">{districtId ? 'Pilih kode pos' : 'Pilih kecamatan dulu'}</option>
-                {districtId && postalCodes.length === 0 ? (
-                  <option value="-">-</option>
-                ) : null}
-                {postalCodes.map((k) => (
-                  <option key={k.id} value={k.text}>
-                    {k.text}
+                <option value="">{districtId ? 'Pilih kelurahan' : 'Pilih kecamatan dulu'}</option>
+                {villages.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.text}
                   </option>
                 ))}
               </select>
