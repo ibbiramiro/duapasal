@@ -88,7 +88,6 @@ export default function RegisterPage() {
   const [provinces, setProvinces] = useState<LocationOption[]>([])
   const [regencies, setRegencies] = useState<LocationOption[]>([])
   const [districts, setDistricts] = useState<LocationOption[]>([])
-  const [postalCodes, setPostalCodes] = useState<LocationOption[]>([])
 
   const [provinceId, setProvinceId] = useState<string>('')
   const [regencyId, setRegencyId] = useState<string>('')
@@ -326,9 +325,9 @@ export default function RegisterPage() {
     setProvinceId('')
     setRegencyId('')
     setDistrictId('')
+    setProvinces([])
     setRegencies([])
     setDistricts([])
-    setPostalCodes([])
 
     setTimeout(() => {
       router.push('/login')
@@ -502,7 +501,6 @@ export default function RegisterPage() {
                   setDistrictId('')
                   setRegencies([])
                   setDistricts([])
-                  setPostalCodes([])
 
                   if (!nextId) return
                   try {
@@ -537,7 +535,6 @@ export default function RegisterPage() {
                   updateField('postal_code', '')
                   setDistrictId('')
                   setDistricts([])
-                  setPostalCodes([])
 
                   if (!nextId) return
                   try {
@@ -573,23 +570,6 @@ export default function RegisterPage() {
                   const nextText = districts.find((d) => d.id === nextId)?.text ?? ''
                   updateField('district', nextText)
                   updateField('postal_code', '')
-                  setPostalCodes([])
-
-                  if (!regencyId || !nextId) return
-                  try {
-                    const res = await fetch(
-                      `/api/locations/postal-codes?regency_id=${encodeURIComponent(regencyId)}&district_id=${encodeURIComponent(nextId)}`
-                    )
-                    const json = (await res.json()) as { data?: LocationOption[] }
-                    const nextPostalCodes = json.data ?? []
-                    setPostalCodes(nextPostalCodes)
-                    if (nextPostalCodes.length === 0) {
-                      updateField('postal_code', '-')
-                    }
-                  } catch (_err) {
-                    setPostalCodes([])
-                    updateField('postal_code', '-')
-                  }
                 }}
                 required
                 disabled={!regencyId}
@@ -605,23 +585,14 @@ export default function RegisterPage() {
             </div>
             <div className="grid gap-2">
               <label className="text-sm font-medium">Kode Pos</label>
-              <select
+              <input
+                type="text"
                 value={form.postal_code}
                 onChange={(e) => updateField('postal_code', e.target.value)}
-                required={Boolean(districtId) && postalCodes.length > 0}
                 disabled={!districtId}
+                placeholder={districtId ? 'Masukkan kode pos' : 'Pilih kecamatan dulu'}
                 className="w-full rounded border border-slate-200 bg-white px-3 py-2 outline-none focus:border-indigo-400 disabled:bg-slate-50"
-              >
-                <option value="">{districtId ? 'Pilih kode pos' : 'Pilih kecamatan dulu'}</option>
-                {districtId && postalCodes.length === 0 ? (
-                  <option value="-">-</option>
-                ) : null}
-                {postalCodes.map((k) => (
-                  <option key={k.id} value={k.text}>
-                    {k.text}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
           </div>
 

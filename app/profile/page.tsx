@@ -104,7 +104,6 @@ export default function ProfilePage() {
   const [provinces, setProvinces] = useState<LocationOption[]>([])
   const [regencies, setRegencies] = useState<LocationOption[]>([])
   const [districts, setDistricts] = useState<LocationOption[]>([])
-  const [postalCodes, setPostalCodes] = useState<LocationOption[]>([])
 
   const [provinceId, setProvinceId] = useState<string>('')
   const [regencyId, setRegencyId] = useState<string>('')
@@ -303,22 +302,16 @@ export default function ProfilePage() {
         if (!district) return
         setDistrictId(district.id)
 
-        const pcRes = await fetch(
-          `/api/locations/postal-codes?regency_id=${encodeURIComponent(regency.id)}&district_id=${encodeURIComponent(district.id)}`
-        )
-        const pcJson = (await pcRes.json()) as { data?: LocationOption[] }
-        if (cancelled) return
-        const pcData = pcJson.data ?? []
-        setPostalCodes(pcData)
-
-        if (postalCodeText && pcData.some((p) => p.text === postalCodeText)) {
-          updateField('postal_code', postalCodeText)
-        }
-      } catch (_e) {
+        updateField('postal_code', postalCodeText)
+      } catch (_err) {
         if (cancelled) return
         setRegencies([])
         setDistricts([])
-        setPostalCodes([])
+        setProvinceId('')
+        setRegencyId('')
+        setDistrictId('')
+      } finally {
+        if (cancelled) return
       }
     }
 
@@ -658,7 +651,6 @@ export default function ProfilePage() {
                       setDistrictId('')
                       setRegencies([])
                       setDistricts([])
-                      setPostalCodes([])
 
                       if (!nextId) return
                       try {
@@ -693,7 +685,6 @@ export default function ProfilePage() {
                       updateField('postal_code', '')
                       setDistrictId('')
                       setDistricts([])
-                      setPostalCodes([])
 
                       if (!nextId) return
                       try {
@@ -729,23 +720,6 @@ export default function ProfilePage() {
                       const nextText = districts.find((d) => d.id === nextId)?.text ?? ''
                       updateField('district', nextText)
                       updateField('postal_code', '')
-                      setPostalCodes([])
-
-                      if (!regencyId || !nextId) return
-                      try {
-                        const res = await fetch(
-                          `/api/locations/postal-codes?regency_id=${encodeURIComponent(regencyId)}&district_id=${encodeURIComponent(nextId)}`
-                        )
-                        const json = (await res.json()) as { data?: LocationOption[] }
-                        const nextPostalCodes = json.data ?? []
-                        setPostalCodes(nextPostalCodes)
-                        if (nextPostalCodes.length === 0) {
-                          updateField('postal_code', '-')
-                        }
-                      } catch (_err) {
-                        setPostalCodes([])
-                        updateField('postal_code', '-')
-                      }
                     }}
                     disabled={!regencyId}
                     className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-slate-50"
@@ -761,21 +735,14 @@ export default function ProfilePage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Kode Pos</label>
-                  <select
+                  <input
+                    type="text"
                     value={form.postal_code}
                     onChange={(e) => updateField('postal_code', e.target.value)}
                     disabled={!districtId}
+                    placeholder={districtId ? 'Masukkan kode pos' : 'Pilih kecamatan dulu'}
                     className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-slate-50"
-                    required={Boolean(districtId) && postalCodes.length > 0}
-                  >
-                    <option value="">{districtId ? 'Pilih kode pos' : 'Pilih kecamatan dulu'}</option>
-                    {districtId && postalCodes.length === 0 ? <option value="-">-</option> : null}
-                    {postalCodes.map((k) => (
-                      <option key={k.id} value={k.text}>
-                        {k.text}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
               </div>
 

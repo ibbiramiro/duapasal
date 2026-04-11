@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 
 import { supabase } from '@/lib/supabase'
 import Header from '@/components/Header'
-import type { TodayReadingResponse } from '@/types/reading'
+import type { TodayReadingResponse, ReadingCalendarResponse } from '@/types/reading'
 
 type MeResponse = {
   user?: {
@@ -26,6 +26,13 @@ export default function DashboardPage() {
   const [readingData, setReadingData] = useState<TodayReadingResponse | null>(null)
   const [readingLoading, setReadingLoading] = useState(true)
 
+  const [calendarMonth, setCalendarMonth] = useState<string>('')
+  const [calendarData, setCalendarData] = useState<ReadingCalendarResponse | null>(null)
+  const [calendarLoading, setCalendarLoading] = useState(false)
+  const [selectedDate, setSelectedDate] = useState<string>('')
+  const [selectedReadingData, setSelectedReadingData] = useState<TodayReadingResponse | null>(null)
+  const [selectedReadingLoading, setSelectedReadingLoading] = useState(false)
+
   function optimisticMarkCompleted(planItemId?: string | null) {
     if (!planItemId) return
     setReadingData((prev) => {
@@ -36,6 +43,88 @@ export default function DashboardPage() {
         completedItems: [...prev.completedItems, planItemId],
       }
     })
+  }
+
+  async function loadCalendar(month: string) {
+    if (!month) return
+    try {
+      setCalendarLoading(true)
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      const res = await fetch(`/api/reading/calendar?month=${encodeURIComponent(month)}`, {
+        cache: 'no-store',
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+      })
+      if (!res.ok) return
+      const json = (await res.json()) as ReadingCalendarResponse
+      setCalendarData(json)
+    } catch (e) {
+      console.error('Failed to load reading calendar:', e)
+      setCalendarData(null)
+    } finally {
+      setCalendarLoading(false)
+    }
+  }
+
+  async function loadReadingByDate(date: string) {
+    if (!date) return
+    try {
+      setSelectedReadingLoading(true)
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      const res = await fetch(`/api/reading/today?date=${encodeURIComponent(date)}`, {
+        cache: 'no-store',
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+      })
+      if (!res.ok) return
+      const json = (await res.json()) as TodayReadingResponse
+      setSelectedReadingData(json)
+    } catch (e) {
+      console.error('Failed to load reading by date:', e)
+      setSelectedReadingData(null)
+    } finally {
+      setSelectedReadingLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!loading && calendarMonth) {
+      loadCalendar(calendarMonth)
+    }
+  }, [loading, calendarMonth])
+
+  useEffect(() => {
+    if (!loading && selectedDate) {
+      loadReadingByDate(selectedDate)
+    }
+  }, [loading, selectedDate])
+
+  function addMonths(month: string, delta: number) {
+    const [yStr, mStr] = month.split('-')
+    const y = Number(yStr)
+    const m = Number(mStr)
+    const next = new Date(Date.UTC(y, m - 1 + delta, 1))
+    const yy = next.getUTCFullYear()
+    const mm = String(next.getUTCMonth() + 1).padStart(2, '0')
+    return `${yy}-${mm}`
+  }
+
+  function formatMonthTitle(month: string) {
+    const [yStr, mStr] = month.split('-')
+    const d = new Date(Date.UTC(Number(yStr), Number(mStr) - 1, 1))
+    return new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(d)
+  }
+
+  function getMonthDaysCount(month: string) {
+    const [yStr, mStr] = month.split('-')
+    const y = Number(yStr)
+    const m = Number(mStr)
+    return new Date(Date.UTC(y, m, 0)).getUTCDate()
+  }
+
+  function getWeekdayIndex(date: string) {
+    const d = new Date(`${date}T00:00:00`)
+    return d.getDay()
   }
 
   useEffect(() => {
@@ -81,8 +170,19 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!loading) {
       loadTodayReading()
+      initCalendarMonth()
     }
   }, [loading])
+
+  function getJakartaDateString(now: Date) {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(now)
+  }
+
+  function initCalendarMonth() {
+    const m = getJakartaDateString(new Date()).slice(0, 7)
+    setCalendarMonth(m)
+    setSelectedDate(getJakartaDateString(new Date()))
+  }
 
   // Refresh when a reading is completed in another tab (reader window)
   useEffect(() => {
@@ -443,6 +543,191 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
+
+          {/* Calendar Section */}
+          <div className="bg-white rounded-lg border border-slate-200 shadow-sm">
+            <div className="p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">Kalender Bacaan</h3>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Hari yang terlewat akan ditandai. Klik tanggal untuk melihat pasal yang belum selesai dan mulai membaca.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCalendarMonth((m) => addMonths(m, -1))}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    Sebelumnya
+                  </button>
+                  <div className="min-w-[11rem] text-center text-sm font-semibold text-slate-900">
+                    {calendarMonth ? formatMonthTitle(calendarMonth) : ''}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCalendarMonth((m) => addMonths(m, 1))}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    Berikutnya
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                  <div className="grid grid-cols-7 gap-2 text-xs font-semibold text-slate-500 mb-2">
+                    <div className="text-center">Min</div>
+                    <div className="text-center">Sen</div>
+                    <div className="text-center">Sel</div>
+                    <div className="text-center">Rab</div>
+                    <div className="text-center">Kam</div>
+                    <div className="text-center">Jum</div>
+                    <div className="text-center">Sab</div>
+                  </div>
+
+                  <div className="grid grid-cols-7 gap-2">
+                    {(() => {
+                      if (!calendarMonth) return null
+                      const daysCount = getMonthDaysCount(calendarMonth)
+                      const firstDate = `${calendarMonth}-01`
+                      const firstDay = getWeekdayIndex(firstDate)
+                      const map = new Map((calendarData?.days ?? []).map((d) => [d.date, d]))
+                      const today = getJakartaDateString(new Date())
+                      const cells: Array<JSX.Element> = []
+
+                      for (let i = 0; i < firstDay; i++) {
+                        cells.push(<div key={`pad-${i}`} />)
+                      }
+
+                      for (let day = 1; day <= daysCount; day++) {
+                        const date = `${calendarMonth}-${String(day).padStart(2, '0')}`
+                        const info = map.get(date)
+                        const isToday = date === today
+                        const isSelected = date === selectedDate
+                        const isFuture = date > today
+
+                        const hasPlan = Boolean(info && info.total > 0)
+                        const isCompleted = Boolean(info && info.total > 0 && info.completed >= info.total)
+                        const isMissed = Boolean(info && info.missed)
+
+                        const base = 'h-10 w-full rounded-lg border text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-indigo-500'
+
+                        let cls = `${base} border-slate-200 bg-white text-slate-700 hover:bg-slate-50`
+                        if (!hasPlan) cls = `${base} border-slate-100 bg-slate-50 text-slate-400`
+                        if (isCompleted) cls = `${base} border-green-200 bg-green-50 text-green-800 hover:bg-green-100`
+                        if (isMissed) cls = `${base} border-red-200 bg-red-50 text-red-800 hover:bg-red-100`
+                        if (isToday) cls = `${cls} ring-1 ring-indigo-500`
+                        if (isSelected) cls = `${cls} ring-2 ring-indigo-600`
+                        if (isFuture) cls = `${base} border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed`
+
+                        cells.push(
+                          <button
+                            key={date}
+                            type="button"
+                            className={cls}
+                            disabled={isFuture}
+                            onClick={() => setSelectedDate(date)}
+                            title={
+                              hasPlan
+                                ? isCompleted
+                                  ? 'Selesai'
+                                  : isMissed
+                                    ? 'Terlewat'
+                                    : 'Belum selesai'
+                                : 'Tidak ada rencana'
+                            }
+                          >
+                            {day}
+                          </button>
+                        )
+                      }
+                      return cells
+                    })()}
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-3 text-xs text-slate-600">
+                    <div className="flex items-center gap-2">
+                      <span className="h-3 w-3 rounded bg-red-100 border border-red-200" />
+                      Terlewat
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="h-3 w-3 rounded bg-green-100 border border-green-200" />
+                      Selesai
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="h-3 w-3 rounded bg-slate-50 border border-slate-100" />
+                      Tidak ada rencana
+                    </div>
+                  </div>
+
+                  {calendarLoading ? (
+                    <div className="mt-4 text-sm text-slate-500">Memuat kalender...</div>
+                  ) : null}
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">Bacaan: {selectedDate || '-'}</div>
+                      <div className="mt-1 text-sm text-slate-600">Mulai membaca untuk mengejar hari yang terlewat.</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const today = getJakartaDateString(new Date())
+                        setSelectedDate(today)
+                        setCalendarMonth(today.slice(0, 7))
+                      }}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      Ke hari ini
+                    </button>
+                  </div>
+
+                  {selectedReadingLoading ? (
+                    <div className="mt-4 text-sm text-slate-600">Memuat bacaan...</div>
+                  ) : !selectedReadingData || selectedReadingData.items.length === 0 ? (
+                    <div className="mt-4 text-sm text-slate-600">Tidak ada bacaan untuk tanggal ini.</div>
+                  ) : (
+                    <div className="mt-4 space-y-2">
+                      {selectedReadingData.items.map((item, idx) => {
+                        const isCompleted = selectedReadingData.completedItems.includes(item.id)
+                        return (
+                          <div
+                            key={item.id}
+                            className={`flex items-center justify-between rounded-lg border px-3 py-2 ${
+                              isCompleted ? 'border-green-200 bg-green-50' : 'border-slate-200 bg-white'
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <div className="text-sm font-medium text-slate-900 truncate">
+                                {idx + 1}. {item.bible_books.name} {item.start_chapter}
+                                {item.end_chapter > item.start_chapter && `-${item.end_chapter}`}
+                              </div>
+                              <div className="text-xs text-slate-500">
+                                {isCompleted ? 'Selesai' : 'Belum selesai'}
+                              </div>
+                            </div>
+                            {!isCompleted ? (
+                              <button
+                                type="button"
+                                onClick={() => openReader(item)}
+                                className="inline-flex items-center justify-center gap-2 rounded-full bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/30 transition hover:bg-indigo-700"
+                              >
+                                Mulai
+                              </button>
+                            ) : null}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

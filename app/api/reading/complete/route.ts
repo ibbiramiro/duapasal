@@ -62,10 +62,15 @@ export async function POST(request: Request) {
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const { planItemId, fallback } = await request.json()
+    const { planItemId, fallback, comment } = await request.json()
 
     if (!planItemId) {
       return NextResponse.json({ error: 'Plan item ID is required' }, { status: 400 })
+    }
+
+    const normalizeWordCount = (text: string) => {
+      const tokens = text.trim().split(/\s+/).filter(Boolean)
+      return tokens.length
     }
 
     const now = new Date()
@@ -107,8 +112,19 @@ export async function POST(request: Request) {
 
     const alreadyCompleted = Boolean(existingLog)
 
+    if (!alreadyCompleted) {
+      const c = typeof comment === 'string' ? comment.trim() : ''
+      if (!c) {
+        return NextResponse.json({ error: 'Komentar wajib diisi (minimal 10 kata).' }, { status: 400 })
+      }
+      if (normalizeWordCount(c) < 10) {
+        return NextResponse.json({ error: 'Komentar minimal 10 kata.' }, { status: 400 })
+      }
+    }
+
     let readingLog = existingLog
     if (!readingLog) {
+      const c = typeof comment === 'string' ? comment.trim() : ''
       const { data: inserted, error: logError } = await supabaseAdmin
         .from('reading_logs')
         .insert({
@@ -116,6 +132,7 @@ export async function POST(request: Request) {
           plan_item_id: planItemId,
           completed_at: now.toISOString(),
           points_earned: points,
+          comment: c,
         })
         .select()
         .single()
@@ -125,6 +142,15 @@ export async function POST(request: Request) {
       }
 
       readingLog = inserted
+    } else {
+      const existingComment = (readingLog as any)?.comment
+      const c = typeof comment === 'string' ? comment.trim() : ''
+      if (!existingComment && c) {
+        await supabaseAdmin
+          .from('reading_logs')
+          .update({ comment: c })
+          .eq('id', (readingLog as any).id)
+      }
     }
 
     // Get all items for this schedule date

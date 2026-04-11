@@ -44,3 +44,17 @@ export type CompleteReadingResponse = {
   }
   message: string
 }
+
+export type ReadingCalendarDay = {
+  date: string
+  total: number
+  completed: number
+  missed: boolean
+}
+
+export type ReadingCalendarResponse = {
+  month: string
+  startDate: string
+  endDate: string
+  days: ReadingCalendarDay[]
+}

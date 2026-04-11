@@ -18,15 +18,22 @@ function ReaderContent() {
   const [fontSize, setFontSize] = useState(18)
   const [completing, setCompleting] = useState(false)
   const [completed, setCompleted] = useState(false)
-  const [autoSaving, setAutoSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [comment, setComment] = useState('')
+  const [commentTouched, setCommentTouched] = useState(false)
 
   const planItemIdFromQuery = searchParams.get('planItemId')
   const bookId = searchParams.get('bookId')
   const startChapter = searchParams.get('startChapter')
   const endChapter = searchParams.get('endChapter')
 
-  const [hasAutoSavedProgress, setHasAutoSavedProgress] = useState(false)
+  function countWords(text: string) {
+    const tokens = text.trim().split(/\s+/).filter(Boolean)
+    return tokens.length
+  }
+
+  const commentWordCount = countWords(comment)
+  const canComplete = commentWordCount >= 10
 
   useEffect(() => {
     if (!bookId || !startChapter || !endChapter) {
@@ -37,93 +44,6 @@ function ReaderContent() {
 
     loadVerses()
   }, [bookId, startChapter, endChapter])
-
-  useEffect(() => {
-    if (loading) return
-    if (completed) return
-    if (!planItemIdFromQuery) return
-    if (hasAutoSavedProgress) return
-
-    let cancelled = false
-
-    async function markProgressOnce() {
-      if (cancelled) return
-      setAutoSaving(true)
-      try {
-        const { data: sessionData } = await supabase.auth.getSession()
-        const accessToken = sessionData.session?.access_token
-        if (!accessToken) return
-
-        const res = await fetch('/api/reading/complete', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({ planItemId: planItemIdFromQuery }),
-        })
-
-        if (!res.ok) {
-          const _errText = await res.text()
-          return
-        }
-
-        const result = await res.json()
-
-        setHasAutoSavedProgress(true)
-        if (result?.alreadyCompleted) {
-          setCompleted(true)
-        }
-
-        try {
-          localStorage.setItem('duapasal:last_reading_complete', JSON.stringify({
-            at: Date.now(),
-            planItemId: planItemIdFromQuery,
-          }))
-        } catch (_e) {
-          // ignore
-        }
-        try {
-          const bc = new BroadcastChannel('duapasal')
-          bc.postMessage({ type: 'reading_completed', at: Date.now(), planItemId: planItemIdFromQuery })
-          bc.close()
-        } catch (_e) {
-          // ignore
-        }
-
-        try {
-          if (window.opener && !window.opener.closed) {
-            window.opener.postMessage(
-              { type: 'duapasal:reading_completed', at: Date.now(), planItemId: planItemIdFromQuery },
-              window.location.origin
-            )
-          }
-        } catch (_e) {
-          // ignore
-        }
-      } finally {
-        setAutoSaving(false)
-      }
-    }
-
-    const handler = () => {
-      markProgressOnce()
-      window.removeEventListener('scroll', handler)
-      window.removeEventListener('click', handler)
-      window.removeEventListener('touchstart', handler)
-    }
-
-    window.addEventListener('scroll', handler, { passive: true })
-    window.addEventListener('click', handler)
-    window.addEventListener('touchstart', handler, { passive: true })
-
-    return () => {
-      cancelled = true
-      window.removeEventListener('scroll', handler)
-      window.removeEventListener('click', handler)
-      window.removeEventListener('touchstart', handler)
-    }
-  }, [loading, completed, planItemIdFromQuery, hasAutoSavedProgress])
 
   async function loadVerses() {
     try {
@@ -178,6 +98,7 @@ function ReaderContent() {
         },
         body: JSON.stringify({
           planItemId: planItemIdFromQuery,
+          comment,
         })
       })
 
@@ -323,9 +244,6 @@ function ReaderContent() {
                 </button>
               </div>
             </div>
-            {autoSaving ? (
-              <div className="text-sm text-slate-500">Menyimpan progress...</div>
-            ) : null}
           </div>
         </div>
 
@@ -353,14 +271,40 @@ function ReaderContent() {
         </div>
 
         {/* Complete Button at Bottom */}
-        <div className="mt-8 text-center">
-          <button
-            onClick={completeReading}
-            disabled={completing || completed}
-            className="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors text-lg font-medium"
-          >
-            {completed ? '✓ Sudah Selesai' : completing ? 'Menyimpan...' : '✓ Selesai Membaca'}
-          </button>
+        <div className="mt-8">
+          <div className="max-w-3xl mx-auto">
+            <label className="block text-sm font-medium text-slate-700 mb-2">Komentar (minimal 10 kata)</label>
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              onBlur={() => setCommentTouched(true)}
+              rows={3}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              placeholder="Tulis komentar tentang pasal yang dibaca..."
+            />
+            <div className="mt-2 flex items-center justify-between text-sm">
+              <div className={commentTouched && !canComplete ? 'text-red-600' : 'text-slate-500'}>
+                {commentWordCount} / 10 kata
+              </div>
+              {commentTouched && !canComplete ? (
+                <div className="text-red-600">Komentar minimal 10 kata.</div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="mt-6 text-center">
+            <button
+              onClick={() => {
+                setCommentTouched(true)
+                if (!canComplete) return
+                completeReading()
+              }}
+              disabled={completing || completed || !canComplete}
+              className="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors text-lg font-medium"
+            >
+              {completed ? '✓ Sudah Selesai' : completing ? 'Menyimpan...' : '✓ Selesai Membaca'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

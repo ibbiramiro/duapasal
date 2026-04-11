@@ -281,6 +281,7 @@ export type Database = {
           plan_item_id: string
           completed_at: Timestamp
           points_earned: number
+          comment: string | null
           created_at: Timestamp
         }
         Insert: {
@@ -289,6 +290,7 @@ export type Database = {
           plan_item_id: string
           completed_at?: Timestamp
           points_earned: number
+          comment?: string | null
           created_at?: Timestamp
         }
         Update: {
@@ -297,6 +299,7 @@ export type Database = {
           plan_item_id?: string
           completed_at?: Timestamp
           points_earned?: number
+          comment?: string | null
           created_at?: Timestamp
         }
         Relationships: []
