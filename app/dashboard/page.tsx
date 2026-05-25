@@ -35,6 +35,8 @@ export default function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState<string>('')
   const [selectedReadingData, setSelectedReadingData] = useState<TodayReadingResponse | null>(null)
   const [selectedReadingLoading, setSelectedReadingLoading] = useState(false)
+  const [yearlyProgress, setYearlyProgress] = useState<{ year: number, trophies: any[] } | null>(null)
+  const [yearlyProgressLoading, setYearlyProgressLoading] = useState(false)
 
   function optimisticMarkCompleted(planItemId?: string | null) {
     if (!planItemId) return
@@ -101,6 +103,31 @@ export default function DashboardPage() {
       loadReadingByDate(selectedDate)
     }
   }, [loading, selectedDate, activeTab])
+
+  async function loadYearlyProgress() {
+    try {
+      setYearlyProgressLoading(true)
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      const res = await fetch(`/api/reading/yearly-progress?year=${new Date().getFullYear()}`, {
+        cache: 'no-store',
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+      })
+      if (!res.ok) return
+      const json = await res.json()
+      setYearlyProgress(json)
+    } catch (e) {
+      console.error('Failed to load yearly progress:', e)
+    } finally {
+      setYearlyProgressLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!loading && activeTab === 'collection' && !yearlyProgress) {
+      loadYearlyProgress()
+    }
+  }, [loading, activeTab, yearlyProgress])
 
   function addMonths(month: string, delta: number) {
     const [yStr, mStr] = month.split('-')
@@ -803,24 +830,28 @@ export default function DashboardPage() {
           {/* Challenge Trophies Section */}
           <section>
             <h3 className="text-lg font-semibold text-indigo-900 mb-4 px-1">Challenge Trophies</h3>
-            <p className="text-xs font-semibold text-slate-500 px-1 mb-4 -mt-2">2026</p>
-            <div className="grid grid-cols-3 gap-3 md:gap-4">
-              {[
-                { month: 'January', days: 31, earned: false },
-                { month: 'February', days: 28, earned: false },
-                { month: 'March', days: 31, earned: false },
-                { month: 'April', days: 30, earned: false },
-                { month: 'May', days: 31, earned: false },
-              ].map((item, index) => (
-                <div key={index} className="bg-white rounded-2xl p-4 flex flex-col items-center justify-center shadow-sm border border-slate-100 text-center">
-                  <div className={`text-4xl mb-2 ${!item.earned ? 'opacity-50 grayscale' : ''}`}>
-                    🏆
+            <p className="text-xs font-semibold text-slate-500 px-1 mb-4 -mt-2">{yearlyProgress?.year || 2026}</p>
+            {yearlyProgressLoading ? (
+              <div className="text-center py-4 text-slate-500 text-sm">Memuat piala...</div>
+            ) : (
+              <div className="grid grid-cols-3 gap-3 md:gap-4">
+                {(yearlyProgress?.trophies || [
+                  { month: 'January', total: 31, earned: 0, isCompleted: false },
+                  { month: 'February', total: 28, earned: 0, isCompleted: false },
+                  { month: 'March', total: 31, earned: 0, isCompleted: false },
+                  { month: 'April', total: 30, earned: 0, isCompleted: false },
+                  { month: 'May', total: 31, earned: 0, isCompleted: false },
+                ]).map((item: any, index: number) => (
+                  <div key={index} className="bg-white rounded-2xl p-4 flex flex-col items-center justify-center shadow-sm border border-slate-100 text-center">
+                    <div className={`text-4xl mb-2 ${!item.isCompleted ? 'opacity-50 grayscale' : ''}`}>
+                      🏆
+                    </div>
+                    <div className="font-bold text-sm text-slate-800 mt-2">{item.month}</div>
+                    <div className="text-[10px] md:text-xs text-slate-500 mt-1">{item.earned} of {item.total}</div>
                   </div>
-                  <div className="font-bold text-sm text-slate-800 mt-2">{item.month}</div>
-                  <div className="text-[10px] md:text-xs text-slate-500 mt-1">0 of {item.days}</div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </section>
         </div>
       )}
