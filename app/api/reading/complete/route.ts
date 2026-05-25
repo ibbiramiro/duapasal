@@ -112,9 +112,10 @@ export async function POST(request: Request) {
     }
 
     const alreadyCompleted = Boolean(existingLog)
+    const c = typeof comment === 'string' ? comment.replace(/\u00A0/g, ' ').trim() : ''
 
-    if (!alreadyCompleted) {
-      const c = typeof comment === 'string' ? comment.replace(/\u00A0/g, ' ').trim() : ''
+    // If it's a new completion OR they are submitting a comment to an existing log that doesn't have one
+    if (!alreadyCompleted || (alreadyCompleted && !(existingLog as any)?.comment)) {
       if (!c) {
         return NextResponse.json({ error: 'Komentar wajib diisi (minimal 10 kata).' }, { status: 400 })
       }

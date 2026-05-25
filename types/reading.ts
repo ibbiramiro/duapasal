@@ -28,6 +28,7 @@ export type TodayReadingResponse = {
   userStats: {
     totalPoints: number
     currentStreak: number
+    longestStreak: number
     todayPoints: number
   }
 }

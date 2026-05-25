@@ -165,6 +165,7 @@ export async function GET(request: Request) {
       userStats: {
         totalPoints: profile?.total_points || 0,
         currentStreak: effectiveStreak,
+        longestStreak: profile?.longest_streak || 0,
         todayPoints,
       },
     }
